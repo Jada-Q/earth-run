@@ -101,10 +101,11 @@ export function buildLandmarks(): Landmarks {
       // Tokyo Tower: four splayed legs, two observation decks, antenna.
       for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
         const leg = new Group();
-        leg.position.set(sx * 0.02, 0, sz * 0.02);
-        leg.rotation.z = -sx * 0.32;
-        leg.rotation.x = sz * 0.32;
-        prim(leg, new BoxGeometry(0.007, 0.05, 0.007), TEAL, 0, 0.024, 0);
+        leg.position.set(sx * 0.016, 0, sz * 0.016);
+        // Tops lean INWARD to meet the shaft (outward = capsized look).
+        leg.rotation.z = sx * 0.3;
+        leg.rotation.x = -sz * 0.3;
+        prim(leg, new BoxGeometry(0.007, 0.042, 0.007), TEAL, 0, 0.02, 0);
         g.add(leg);
       }
       prim(g, new BoxGeometry(0.022, 0.026, 0.022), TEAL, 0, 0.056, 0);
@@ -181,10 +182,10 @@ export function buildLandmarks(): Landmarks {
       // void hinted by a dark inset, two tapering stages, spire.
       for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
         const leg = new Group();
-        leg.position.set(sx * 0.018, 0, sz * 0.018);
-        leg.rotation.z = -sx * 0.42;
-        leg.rotation.x = sz * 0.42;
-        prim(leg, new BoxGeometry(0.008, 0.04, 0.008), INK_DARK, 0, 0.018, 0);
+        leg.position.set(sx * 0.015, 0, sz * 0.015);
+        leg.rotation.z = sx * 0.4;
+        leg.rotation.x = -sz * 0.4;
+        prim(leg, new BoxGeometry(0.008, 0.036, 0.008), INK_DARK, 0, 0.016, 0);
         g.add(leg);
       }
       prim(g, new BoxGeometry(0.05, 0.006, 0.05), INK_DARK, 0, 0.034, 0); // 1st platform
@@ -275,12 +276,14 @@ export function buildLandmarks(): Landmarks {
     anchors.push({ key: c.key, dir, east, north });
 
     const holder = new Group();
-    // Offset the landmark a touch north of the gate so it frames it.
+    // Close to the gate (a far offset hides the base behind the horizon
+    // bulge — tall landmarks looked like they levitated), and sunk a touch
+    // below the surface so every leg/base is properly grounded.
     const p = new Vector3()
       .copy(dir)
-      .addScaledVector(north, 0.045)
+      .addScaledVector(north, 0.022)
       .normalize();
-    holder.position.copy(p);
+    holder.position.copy(p).multiplyScalar(0.998);
     anchor.position.copy(p);
     anchor.lookAt(p.x * 2, p.y * 2, p.z * 2);
     holder.quaternion.copy(anchor.quaternion);

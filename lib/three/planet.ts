@@ -58,13 +58,13 @@ const FRAG = /* glsl */ `
     float ink = 1.0 - smoothstep(uInkWidth, uInkWidth + w, abs(d - 0.5));
     albedo = mix(albedo, uInk, ink * uInkStrength);
 
-    // Race road: 0 none, ~0.5 asphalt, 1.0 white edge lines. Painted over
-    // land, sea and coastline ink alike — it is the track.
+    // Race road: 0 none, ~0.5 asphalt, 1.0 white edge lines. Land only —
+    // a highway floating on the open sea reads as a glitch, not a track.
     float roadV = texture2D(uRoad, vUv).r;
     float rw = fwidth(roadV) * 1.2;
-    float edgeLine = smoothstep(0.72 - rw, 0.72 + rw, roadV);
-    float asphalt = smoothstep(0.28 - rw, 0.28 + rw, roadV) - edgeLine;
-    albedo = mix(albedo, vec3(0.36, 0.43, 0.45), asphalt);
+    float edgeLine = smoothstep(0.72 - rw, 0.72 + rw, roadV) * land;
+    float asphalt = (smoothstep(0.28 - rw, 0.28 + rw, roadV)) * land - edgeLine;
+    albedo = mix(albedo, vec3(0.36, 0.43, 0.45), max(asphalt, 0.0));
     albedo = mix(albedo, vec3(0.95, 0.94, 0.9), edgeLine);
 
     // Quantized toon shading from the uniform sun.
