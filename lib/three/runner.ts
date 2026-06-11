@@ -99,13 +99,7 @@ export function buildRunner(outfit: Outfit = OUTFITS[0]): Runner {
 
   // ---- BIG head ----------------------------------------------------------
   addBox(body, skin, 0.46, 0.42, 0.44, 0, 0.68, 0);
-  // BIG eyes — reference-sheet proportions: large white ovals with fat
-  // ink pupils, proud of the face so they read at any angle.
-  addBox(body, white, 0.035, 0.17, 0.13, 0.24, 0.69, -0.1, false);
-  addBox(body, white, 0.035, 0.17, 0.13, 0.24, 0.69, 0.1, false);
-  addBox(body, inkSolid, 0.02, 0.1, 0.075, 0.252, 0.665, -0.09, false);
-  addBox(body, inkSolid, 0.02, 0.1, 0.075, 0.252, 0.665, 0.09, false);
-  // little mouth
+  // little mouth (eyes tried and retired by request — clean face)
   addBox(body, inkSolid, 0.016, 0.03, 0.08, 0.245, 0.54, 0, false);
   // mohawk crest front-to-back + cap band
   addBox(body, crest, 0.34, 0.12, 0.1, -0.02, 0.94, 0);

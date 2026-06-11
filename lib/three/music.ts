@@ -1,13 +1,20 @@
-// Generative background music — a cozy pentatonic travel loop, synthesized
-// live with WebAudio (everything else in this game is procedural; so is
-// the soundtrack). Plucked triangle-wave melody on a random walk, a soft
-// sine bass on the downbeats, never repeats, always consonant.
+// Generative background music v2 — upbeat game loop, synthesized live.
+// I–V–vi–IV progression (the eternally cheerful one), bouncing octave
+// bass, square-wave arpeggio lead, kick + offbeat hats. 132 BPM.
 
-const BPM = 88;
+const BPM = 132;
 const BEAT = 60 / BPM;
-// C major pentatonic across two octaves — every note agrees with every
-// other, so a random walk always sounds intentional.
-const SCALE = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25];
+const EIGHTH = BEAT / 2;
+
+// C major: C — G — Am — F. [bass root, chord tones (lead pool)]
+const PROGRESSION: Array<{ root: number; tones: number[] }> = [
+  { root: 65.41, tones: [261.63, 329.63, 392.0, 523.25] }, // C
+  { root: 98.0, tones: [246.94, 293.66, 392.0, 493.88] }, // G
+  { root: 110.0, tones: [220.0, 261.63, 329.63, 440.0] }, // Am
+  { root: 87.31, tones: [220.0, 261.63, 349.23, 440.0] }, // F
+];
+// Per-bar arpeggio shape over the chord-tone pool (8 eighths per bar).
+const ARP = [0, 2, 1, 3, 0, 2, 3, 1];
 
 export interface Music {
   setMuted(m: boolean): void;
@@ -17,17 +24,27 @@ export interface Music {
 export function startMusic(): Music {
   const ctx = new AudioContext();
   const master = ctx.createGain();
-  master.gain.value = 0.16;
+  master.gain.value = 0.15;
   master.connect(ctx.destination);
 
-  let step = 0;
-  let melodyIdx = 3;
-  let disposed = false;
+  // Shared noise buffer for the hats.
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
-  const pluck = (freq: number, t: number, vol: number, decay: number) => {
+  let disposed = false;
+  let eighth = 0;
+
+  const tone = (
+    type: OscillatorType,
+    freq: number,
+    t: number,
+    vol: number,
+    decay: number,
+  ) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = "triangle";
+    osc.type = type;
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(vol, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + decay);
@@ -36,39 +53,58 @@ export function startMusic(): Music {
     osc.stop(t + decay + 0.05);
   };
 
-  // Look-ahead scheduler: queue the next half-beat's notes ~200ms early.
-  let nextNoteTime = ctx.currentTime + 0.1;
+  const kick = (t: number) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(46, t + 0.09);
+    gain.gain.setValueAtTime(0.7, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(gain).connect(master);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  };
+
+  const hat = (t: number) => {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 6500;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    src.connect(hp).connect(gain).connect(master);
+    src.start(t);
+  };
+
+  let nextTime = ctx.currentTime + 0.1;
   const tick = setInterval(() => {
     if (disposed) return;
-    while (nextNoteTime < ctx.currentTime + 0.25) {
-      const t = nextNoteTime;
-      // Melody on half-beats, ~28% rests for breathing room.
-      if (Math.random() > 0.28) {
-        const moves = [-2, -1, -1, 1, 1, 2];
-        melodyIdx = Math.max(
-          0,
-          Math.min(
-            SCALE.length - 1,
-            melodyIdx + moves[Math.floor(Math.random() * moves.length)],
-          ),
-        );
-        pluck(SCALE[melodyIdx], t, 0.5, BEAT * 1.6);
+    while (nextTime < ctx.currentTime + 0.25) {
+      const t = nextTime;
+      const bar = Math.floor(eighth / 8) % PROGRESSION.length;
+      const pos = eighth % 8; // eighth within the bar
+      const chord = PROGRESSION[bar];
+
+      // Bouncing bass: root octaves on every eighth.
+      tone("triangle", pos % 2 === 0 ? chord.root : chord.root * 2, t, 0.5, 0.16);
+      // Lead arpeggio, one octave up, occasional sparkle skip.
+      if (Math.random() > 0.12) {
+        tone("square", chord.tones[ARP[pos]] * 2, t, 0.12, 0.17);
       }
-      // Bass root/fifth on every other downbeat.
-      if (step % 4 === 0) {
-        pluck(step % 8 === 0 ? 130.81 : 98.0, t, 0.55, BEAT * 3.2);
-      }
-      step++;
-      nextNoteTime += BEAT / 2;
+      // Kick on beats 1 & 3, hats on the offbeats.
+      if (pos === 0 || pos === 4) kick(t);
+      if (pos % 2 === 1) hat(t);
+
+      eighth++;
+      nextTime += EIGHTH;
     }
-  }, 120);
+  }, 100);
 
   return {
     setMuted(m: boolean) {
-      master.gain.linearRampToValueAtTime(
-        m ? 0 : 0.16,
-        ctx.currentTime + 0.3,
-      );
+      master.gain.linearRampToValueAtTime(m ? 0 : 0.15, ctx.currentTime + 0.3);
     },
     dispose() {
       disposed = true;
