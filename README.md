@@ -1,5 +1,7 @@
 # Earth Run
 
+![Earth Run — Tokyo Tower spawn](docs/screenshot.png)
+
 Race a little runner around a tiny toon planet — eastbound from Tokyo,
 through 11 city checkpoint gates, back to the start line. Past drifting
 clouds, blocky airplanes with contrails, ships that fade out near
@@ -33,5 +35,9 @@ ambient life pack) was born there.
 pnpm install
 pnpm dev   # http://localhost:3014
 ```
+
+Part of [Jada-Q](https://github.com/Jada-Q)'s ambient world series —
+sister pieces: [Quake Globe](https://github.com/Jada-Q/quake-globe),
+Tide Pixels, Sky Traffic, Bay Ships, Subway Pulse.
 
 MIT.
