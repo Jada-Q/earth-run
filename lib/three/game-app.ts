@@ -30,6 +30,7 @@ import { buildRace, type Race, type RaceHud } from "./race";
 import { buildIntroLetters, type IntroLetters } from "./intro-letters";
 import { buildLandmarks, type Landmarks } from "./landmarks";
 import { buildNpcs, type Npcs } from "./npcs";
+import { buildStreetProps, type StreetProps } from "./streetprops";
 import {
   ConeGeometry,
   Mesh as ThreeMesh,
@@ -49,8 +50,8 @@ const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
 const ENTER_MS = 900;
 const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
-const CAM_DIST = 0.36; // behind the runner
-const CAM_HEIGHT = 0.17; // above the surface
+const CAM_DIST = 0.3; // behind the runner
+const CAM_HEIGHT = 0.1; // low — street-level feel, horizon high in frame
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
 type Mode = "orbit" | "entering" | "play";
@@ -89,6 +90,7 @@ export class EarthRunApp {
   private race: Race;
   private landmarks: Landmarks;
   private npcs: Npcs;
+  private streetProps: StreetProps;
   private introLetters: IntroLetters | null = null;
   private guideArrow: ThreeMesh;
   private guideDir = new Vector3();
@@ -139,6 +141,8 @@ export class EarthRunApp {
     this.spinGroup.add(this.landmarks.group);
     this.npcs = buildNpcs(this.landmarks);
     this.spinGroup.add(this.npcs.group);
+    this.streetProps = buildStreetProps(this.landmarks);
+    this.spinGroup.add(this.streetProps.group);
     this.guideArrow = new ThreeMesh(
       new ConeGeometry(0.007, 0.02, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
@@ -293,7 +297,9 @@ export class EarthRunApp {
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
       cam.position.lerp(this.camTarget, k);
       cam.up.copy(up);
-      this.camLook.copy(this.player.group.position).addScaledVector(fwd, 0.16);
+      // Look well past the runner so the horizon sits high in frame
+      // (street-level feel, like the reference).
+      this.camLook.copy(this.player.group.position).addScaledVector(fwd, 0.3);
       cam.lookAt(this.camLook);
     }
 
@@ -334,6 +340,7 @@ export class EarthRunApp {
     this.race.dispose();
     this.landmarks.dispose();
     this.npcs.dispose();
+    this.streetProps.dispose();
     this.introLetters?.dispose();
     this.guideArrow.geometry.dispose();
     (this.guideArrow.material as MeshBasicMaterial).dispose();

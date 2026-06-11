@@ -42,6 +42,7 @@ const PAPER = "#e9e5d8";
 const TEAL = "#2e5d66";
 const GREEN = "#3e7d58";
 const CREAM = "#efe7cf";
+const INK_DARK = "#3a4d48";
 
 export interface Landmarks {
   group: Group;
@@ -91,86 +92,174 @@ export function buildLandmarks(): Landmarks {
   };
 
   // ------------------------------------------------------- the landmarks --
-  // Local frame: +Y up from the surface, origin at ground level.
+  // Local frame: +Y up from the surface, origin at ground level. Each
+  // builder leans on the structure that makes the real one recognizable:
+  // Willis' bundled tubes, the Colosseum's diagonal break, the Pearl's
+  // tripod, Eiffel's splayed legs, Liberty's crown + tablet.
   const builders: Record<string, (g: Group) => void> = {
     tokyo(g) {
-      // Tokyo Tower: tapering three-stage lattice silhouette + antenna.
-      prim(g, new BoxGeometry(0.05, 0.035, 0.05), TEAL, 0, 0.018, 0);
-      prim(g, new BoxGeometry(0.032, 0.035, 0.032), TEAL, 0, 0.052, 0);
-      prim(g, new BoxGeometry(0.018, 0.03, 0.018), TEAL, 0, 0.084, 0);
-      prim(g, new CylinderGeometry(0.0028, 0.0028, 0.03, 4), PAPER, 0, 0.112, 0);
+      // Tokyo Tower: four splayed legs, two observation decks, antenna.
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        const leg = new Group();
+        leg.position.set(sx * 0.02, 0, sz * 0.02);
+        leg.rotation.z = -sx * 0.32;
+        leg.rotation.x = sz * 0.32;
+        prim(leg, new BoxGeometry(0.007, 0.05, 0.007), TEAL, 0, 0.024, 0);
+        g.add(leg);
+      }
+      prim(g, new BoxGeometry(0.022, 0.026, 0.022), TEAL, 0, 0.056, 0);
+      prim(g, new CylinderGeometry(0.017, 0.02, 0.008, 10), PAPER, 0, 0.047, 0); // main deck
+      prim(g, new BoxGeometry(0.012, 0.026, 0.012), TEAL, 0, 0.082, 0);
+      prim(g, new CylinderGeometry(0.01, 0.011, 0.006, 10), PAPER, 0, 0.097, 0); // top deck
+      prim(g, new CylinderGeometry(0.0022, 0.0022, 0.034, 6), PAPER, 0, 0.117, 0);
     },
     la(g) {
-      // Hollywood-ish hill sign + two palms.
-      prim(g, new BoxGeometry(0.07, 0.018, 0.012), PAPER, 0, 0.026, 0);
-      prim(g, new CylinderGeometry(0.003, 0.004, 0.034, 5), TEAL, -0.045, 0.017, 0.012);
-      prim(g, new SphereGeometry(0.012, 10, 8), GREEN, -0.045, 0.04, 0.012);
-      prim(g, new CylinderGeometry(0.003, 0.004, 0.028, 5), TEAL, 0.046, 0.014, -0.01);
-      prim(g, new SphereGeometry(0.01, 10, 8), GREEN, 0.046, 0.033, -0.01);
+      // Hollywood: letter-block sign on a green hill ridge + palms.
+      prim(g, new BoxGeometry(0.085, 0.02, 0.05), GREEN, 0, 0.008, 0); // hill
+      for (let i = 0; i < 9; i++) {
+        const h = 0.011 + (i % 2) * 0.002;
+        prim(g, new BoxGeometry(0.006, h, 0.0035), PAPER, -0.034 + i * 0.0085, 0.018 + h / 2, 0.012);
+      }
+      for (const [px, pz, ph] of [[-0.05, -0.018, 0.032], [0.05, -0.012, 0.027]] as const) {
+        prim(g, new CylinderGeometry(0.0025, 0.0035, ph, 6), "#8a7d62", px, ph / 2 + 0.012, pz);
+        prim(g, new SphereGeometry(0.0095, 10, 8), GREEN, px, ph + 0.016, pz);
+        prim(g, new SphereGeometry(0.0075, 10, 8), GREEN, px + 0.006, ph + 0.013, pz);
+      }
     },
     chicago(g) {
-      // Willis Tower: stepped dark prism + twin antennae.
-      prim(g, new BoxGeometry(0.034, 0.06, 0.028), TEAL, 0, 0.03, 0);
-      prim(g, new BoxGeometry(0.022, 0.03, 0.02), TEAL, 0, 0.075, 0);
-      prim(g, new CylinderGeometry(0.002, 0.002, 0.024, 4), PAPER, -0.006, 0.1, 0);
-      prim(g, new CylinderGeometry(0.002, 0.002, 0.02, 4), PAPER, 0.007, 0.098, 0);
+      // Willis Tower: nine bundled square tubes stepping down + antennae.
+      const tube = 0.011;
+      const heights = [
+        [0.052, 0.072, 0.052],
+        [0.072, 0.098, 0.072],
+        [0.034, 0.072, 0.034],
+      ];
+      for (let ix = 0; ix < 3; ix++) {
+        for (let iz = 0; iz < 3; iz++) {
+          const h = heights[iz][ix];
+          prim(
+            g,
+            new BoxGeometry(tube, h, tube),
+            TEAL,
+            (ix - 1) * tube,
+            h / 2,
+            (iz - 1) * tube,
+          );
+        }
+      }
+      prim(g, new CylinderGeometry(0.0016, 0.0016, 0.026, 4), PAPER, -0.006, 0.11, -0.004);
+      prim(g, new CylinderGeometry(0.0016, 0.0016, 0.022, 4), PAPER, 0.006, 0.108, 0.004);
     },
     nyc(g) {
-      // Statue of Liberty: pedestal, green figure, raised torch arm.
-      prim(g, new BoxGeometry(0.026, 0.024, 0.026), PAPER, 0, 0.012, 0);
-      prim(g, new BoxGeometry(0.016, 0.034, 0.012), GREEN, 0, 0.04, 0);
-      prim(g, new BoxGeometry(0.011, 0.011, 0.011), GREEN, 0, 0.062, 0);
-      prim(g, new BoxGeometry(0.005, 0.028, 0.005), GREEN, 0.011, 0.068, 0);
-      prim(g, new SphereGeometry(0.0045, 8, 6), CREAM, 0.011, 0.084, 0);
+      // Liberty: two-tier pedestal, robed figure, crown spikes, torch up,
+      // tablet in the left arm.
+      prim(g, new BoxGeometry(0.034, 0.012, 0.034), PAPER, 0, 0.006, 0);
+      prim(g, new BoxGeometry(0.024, 0.018, 0.024), PAPER, 0, 0.021, 0);
+      prim(g, new BoxGeometry(0.017, 0.012, 0.017), GREEN, 0, 0.036, 0); // robe base
+      prim(g, new BoxGeometry(0.013, 0.026, 0.011), GREEN, 0, 0.054, 0); // body
+      prim(g, new BoxGeometry(0.0085, 0.0085, 0.0085), GREEN, 0, 0.072, 0); // head
+      for (let i = -2; i <= 2; i++) {
+        prim(g, new BoxGeometry(0.0016, 0.006, 0.0016), GREEN, i * 0.0024, 0.0795, 0);
+      }
+      prim(g, new BoxGeometry(0.004, 0.024, 0.004), GREEN, 0.0085, 0.078, -0.002); // torch arm
+      prim(g, new SphereGeometry(0.0036, 8, 6), CREAM, 0.0085, 0.0925, -0.002); // flame
+      prim(g, new BoxGeometry(0.004, 0.012, 0.008), GREEN, -0.009, 0.058, 0.003); // tablet
     },
     london(g) {
-      // Big Ben: clock tower + pointed cap.
-      prim(g, new BoxGeometry(0.018, 0.066, 0.018), PAPER, 0, 0.033, 0);
-      prim(g, new BoxGeometry(0.022, 0.016, 0.022), CREAM, 0, 0.072, 0);
-      prim(g, new ConeGeometry(0.014, 0.024, 4), TEAL, 0, 0.092, Math.PI / 4);
+      // Big Ben: slender shaft, proud cream clock stage on all faces,
+      // belfry, pyramidal spire with finial.
+      prim(g, new BoxGeometry(0.015, 0.06, 0.015), PAPER, 0, 0.03, 0);
+      prim(g, new BoxGeometry(0.019, 0.014, 0.019), CREAM, 0, 0.066, 0); // clock stage
+      prim(g, new BoxGeometry(0.021, 0.008, 0.008), INK_DARK, 0, 0.066, 0); // face shadow x
+      prim(g, new BoxGeometry(0.008, 0.008, 0.021), INK_DARK, 0, 0.066, 0); // face shadow z
+      prim(g, new BoxGeometry(0.016, 0.01, 0.016), PAPER, 0, 0.078, 0); // belfry
+      prim(g, new ConeGeometry(0.011, 0.02, 4), TEAL, 0, 0.093, Math.PI / 4);
+      prim(g, new CylinderGeometry(0.001, 0.001, 0.008, 4), CREAM, 0, 0.106, 0);
     },
     paris(g) {
-      // Eiffel: three tapering stages + spire, ink-dark.
-      prim(g, new BoxGeometry(0.046, 0.026, 0.046), "#3a4d48", 0, 0.013, 0);
-      prim(g, new BoxGeometry(0.028, 0.028, 0.028), "#3a4d48", 0, 0.04, 0);
-      prim(g, new BoxGeometry(0.014, 0.026, 0.014), "#3a4d48", 0, 0.066, 0);
-      prim(g, new CylinderGeometry(0.0024, 0.0024, 0.026, 4), "#3a4d48", 0, 0.092, 0);
+      // Eiffel: four splayed legs joined by the first platform, arched
+      // void hinted by a dark inset, two tapering stages, spire.
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        const leg = new Group();
+        leg.position.set(sx * 0.018, 0, sz * 0.018);
+        leg.rotation.z = -sx * 0.42;
+        leg.rotation.x = sz * 0.42;
+        prim(leg, new BoxGeometry(0.008, 0.04, 0.008), INK_DARK, 0, 0.018, 0);
+        g.add(leg);
+      }
+      prim(g, new BoxGeometry(0.05, 0.006, 0.05), INK_DARK, 0, 0.034, 0); // 1st platform
+      prim(g, new BoxGeometry(0.022, 0.022, 0.022), INK_DARK, 0, 0.047, 0);
+      prim(g, new BoxGeometry(0.026, 0.005, 0.026), INK_DARK, 0, 0.06, 0); // 2nd platform
+      prim(g, new BoxGeometry(0.011, 0.028, 0.011), INK_DARK, 0, 0.076, 0);
+      prim(g, new BoxGeometry(0.007, 0.018, 0.007), INK_DARK, 0, 0.098, 0);
+      prim(g, new CylinderGeometry(0.0018, 0.0018, 0.022, 4), INK_DARK, 0, 0.116, 0);
     },
     rome(g) {
-      // Colosseum: open-ended elliptical drum.
-      const drum = new CylinderGeometry(0.03, 0.032, 0.024, 20, 1, true);
-      prim(g, drum, PAPER, 0, 0.012, 0);
-      g.scale.z = 0.8; // slightly elliptical
+      // Colosseum: full lower drum + taller partial ring with the iconic
+      // diagonal break, inner drum visible inside.
+      prim(g, new CylinderGeometry(0.03, 0.031, 0.016, 24, 1, true), PAPER, 0, 0.008, 0);
+      const upper = new CylinderGeometry(0.03, 0.03, 0.014, 24, 1, true, 0, Math.PI * 1.25);
+      prim(g, upper, PAPER, 0, 0.023, 0);
+      prim(g, new CylinderGeometry(0.022, 0.022, 0.012, 18, 1, true), "#cfc8b6", 0, 0.006, 0);
+      g.scale.z = 0.82; // elliptical plan
     },
     istanbul(g) {
-      // Hagia Sophia: dome + two minarets.
-      prim(g, new BoxGeometry(0.04, 0.018, 0.04), PAPER, 0, 0.009, 0);
-      prim(g, new SphereGeometry(0.02, 14, 10), TEAL, 0, 0.026, 0);
-      prim(g, new CylinderGeometry(0.0025, 0.0025, 0.05, 5), PAPER, -0.03, 0.025, 0.02);
-      prim(g, new CylinderGeometry(0.0025, 0.0025, 0.05, 5), PAPER, 0.03, 0.025, -0.02);
-      prim(g, new ConeGeometry(0.004, 0.01, 5), TEAL, -0.03, 0.055, 0.02);
-      prim(g, new ConeGeometry(0.004, 0.01, 5), TEAL, 0.03, 0.055, -0.02);
+      // Hagia Sophia: broad base, half-dome shoulders on four sides, main
+      // dome on a drum, four corner minarets with cone caps.
+      prim(g, new BoxGeometry(0.042, 0.016, 0.042), PAPER, 0, 0.008, 0);
+      for (const [dx, dz] of [[0.017, 0], [-0.017, 0], [0, 0.017], [0, -0.017]] as const) {
+        prim(g, new SphereGeometry(0.011, 12, 8), TEAL, dx, 0.018, dz);
+      }
+      prim(g, new CylinderGeometry(0.015, 0.016, 0.008, 14), PAPER, 0, 0.02, 0); // drum
+      prim(g, new SphereGeometry(0.0165, 16, 12), TEAL, 0, 0.028, 0); // main dome
+      for (const [mx, mz] of [[0.026, 0.026], [0.026, -0.026], [-0.026, 0.026], [-0.026, -0.026]] as const) {
+        prim(g, new CylinderGeometry(0.0022, 0.0022, 0.052, 6), PAPER, mx, 0.026, mz);
+        prim(g, new ConeGeometry(0.0036, 0.011, 6), TEAL, mx, 0.057, mz);
+      }
     },
     dubai(g) {
-      // Burj Khalifa: very tall telescoping spire.
-      prim(g, new BoxGeometry(0.026, 0.034, 0.026), CREAM, 0, 0.017, 0);
-      prim(g, new BoxGeometry(0.018, 0.034, 0.018), CREAM, 0, 0.05, 0);
-      prim(g, new BoxGeometry(0.011, 0.03, 0.011), CREAM, 0, 0.082, 0);
-      prim(g, new CylinderGeometry(0.0022, 0.0022, 0.036, 4), CREAM, 0, 0.114, 0);
+      // Burj Khalifa: Y-plan — three wings stepping back around a core
+      // that telescopes to a needle.
+      for (let k = 0; k < 3; k++) {
+        const wing = new Group();
+        wing.rotation.y = (k * 2 * Math.PI) / 3;
+        prim(wing, new BoxGeometry(0.009, 0.038, 0.022), CREAM, 0, 0.019, 0.011);
+        prim(wing, new BoxGeometry(0.007, 0.06, 0.014), CREAM, 0, 0.03, 0.006);
+        g.add(wing);
+      }
+      prim(g, new BoxGeometry(0.011, 0.082, 0.011), CREAM, 0, 0.041, 0);
+      prim(g, new BoxGeometry(0.007, 0.022, 0.007), CREAM, 0, 0.093, 0);
+      prim(g, new CylinderGeometry(0.0016, 0.0016, 0.04, 6), CREAM, 0, 0.122, 0);
     },
     delhi(g) {
-      // India Gate: two pillars + arch slab.
-      prim(g, new BoxGeometry(0.012, 0.046, 0.014), PAPER, -0.016, 0.023, 0);
-      prim(g, new BoxGeometry(0.012, 0.046, 0.014), PAPER, 0.016, 0.023, 0);
-      prim(g, new BoxGeometry(0.05, 0.016, 0.016), PAPER, 0, 0.054, 0);
-      prim(g, new BoxGeometry(0.02, 0.01, 0.012), CREAM, 0, 0.067, 0);
+      // India Gate: plinth, massive piers, dark arch void, attic with the
+      // shallow dome bowl on top.
+      prim(g, new BoxGeometry(0.052, 0.006, 0.024), PAPER, 0, 0.003, 0);
+      prim(g, new BoxGeometry(0.014, 0.042, 0.018), PAPER, -0.017, 0.027, 0);
+      prim(g, new BoxGeometry(0.014, 0.042, 0.018), PAPER, 0.017, 0.027, 0);
+      prim(g, new BoxGeometry(0.02, 0.03, 0.012), INK_DARK, 0, 0.021, 0); // arch void
+      prim(g, new BoxGeometry(0.048, 0.014, 0.02), PAPER, 0, 0.055, 0); // spandrel
+      prim(g, new BoxGeometry(0.036, 0.008, 0.016), CREAM, 0, 0.066, 0); // attic
+      prim(g, new CylinderGeometry(0.008, 0.01, 0.005, 12), PAPER, 0, 0.0725, 0); // bowl
     },
     shanghai(g) {
-      // Oriental Pearl: column with two spheres.
-      prim(g, new CylinderGeometry(0.004, 0.006, 0.08, 6), PAPER, 0, 0.04, 0);
-      prim(g, new SphereGeometry(0.013, 14, 10), TEAL, 0, 0.028, 0);
-      prim(g, new SphereGeometry(0.009, 14, 10), TEAL, 0, 0.066, 0);
-      prim(g, new CylinderGeometry(0.0018, 0.0018, 0.02, 4), PAPER, 0, 0.088, 0);
+      // Oriental Pearl: tripod legs, big lower sphere, shaft, upper
+      // sphere, small top bead + antenna.
+      for (let k = 0; k < 3; k++) {
+        const leg = new Group();
+        leg.rotation.y = (k * 2 * Math.PI) / 3;
+        const l = new Group();
+        l.position.set(0.013, 0, 0);
+        l.rotation.z = 0.5;
+        prim(l, new CylinderGeometry(0.0022, 0.0028, 0.032, 6), PAPER, 0, 0.014, 0);
+        leg.add(l);
+        g.add(leg);
+      }
+      prim(g, new SphereGeometry(0.0145, 16, 12), TEAL, 0, 0.032, 0); // lower sphere
+      prim(g, new CylinderGeometry(0.0036, 0.0044, 0.038, 8), PAPER, 0, 0.052, 0);
+      prim(g, new SphereGeometry(0.0095, 14, 10), TEAL, 0, 0.073, 0); // upper sphere
+      prim(g, new SphereGeometry(0.004, 10, 8), TEAL, 0, 0.0865, 0); // top bead
+      prim(g, new CylinderGeometry(0.0014, 0.0014, 0.022, 4), PAPER, 0, 0.1, 0);
     },
   };
 
