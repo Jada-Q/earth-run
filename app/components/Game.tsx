@@ -23,6 +23,8 @@ function fmt(ms: number): string {
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const appRef = useRef<EarthRunApp | null>(null);
+  const paneDisposeRef = useRef<(() => void) | null>(null);
+  const [paneOn, setPaneOn] = useState(false);
   const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<RaceHud | null>(null);
   const [outfitIdx, setOutfitIdx] = useState(0);
@@ -107,6 +109,23 @@ export default function Game() {
     appRef.current?.startGame(OUTFITS[outfitIdx]);
   };
 
+  const togglePane = () => {
+    if (paneDisposeRef.current) {
+      paneDisposeRef.current();
+      paneDisposeRef.current = null;
+      setPaneOn(false);
+      return;
+    }
+    const app = appRef.current;
+    if (!app) return;
+    void import("@/lib/three/debug-pane").then(async ({ mountDebugPane }) => {
+      if (appRef.current === app && !paneDisposeRef.current) {
+        paneDisposeRef.current = await mountDebugPane(app);
+        setPaneOn(true);
+      }
+    });
+  };
+
   return (
     <>
       <ToonBackdrop />
@@ -115,6 +134,19 @@ export default function Game() {
         className="fixed inset-0 h-full w-full touch-none"
         aria-label="Earth Run"
       />
+      <button
+        type="button"
+        aria-label="Tune look"
+        onClick={togglePane}
+        className={
+          "fixed bottom-4 left-4 z-50 rounded-full border-2 border-[#22302c] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest shadow-[0_3px_0_rgba(34,48,44,0.4)] " +
+          (paneOn
+            ? "bg-[#22302c] text-[#efece3]"
+            : "bg-[#efece3]/80 text-[#22302c]")
+        }
+      >
+        ⚙ tune
+      </button>
       {!started ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-[10%] z-40 flex flex-col items-center gap-5">
           <div className="pointer-events-auto flex items-center gap-3">

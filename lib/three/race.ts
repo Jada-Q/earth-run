@@ -152,6 +152,9 @@ export function buildRace(): Race {
         const g = gates[index];
         const pulse = 1 + 0.15 * Math.sin(nowMs * 0.006);
         g.ring.scale.setScalar(pulse);
+        // Standing inside the beam washes the whole screen — hide the
+        // beacon once you're basically at the gate.
+        g.beacon.visible = playerUp.dot(dirs[index]) < Math.cos(0.038);
         if (playerUp.dot(dirs[index]) > PASS_COS) {
           gates[index].ring.scale.setScalar(1);
           index++;

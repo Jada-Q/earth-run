@@ -57,6 +57,11 @@ const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
 const CAM_DIST = 0.21; // behind the (now pedestrian-sized) runner
 const CAM_HEIGHT = 0.065; // low — street-level feel, horizon high in frame
+// In town the camera rises and looks down over the rooftops — a ground
+// level camera jammed between cottages/poles clips through everything.
+const CAM_HEIGHT_CITY = 0.16;
+const CAM_DIST_CITY = 0.27;
+const CITY_CAM_COS = Math.cos((3.2 * Math.PI) / 180);
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
 type Mode = "orbit" | "entering" | "play";
@@ -108,6 +113,8 @@ export class EarthRunApp {
   private lastTickMs = 0;
   private camTarget = new Vector3();
   private camLook = new Vector3();
+  private camDir = new Vector3();
+  private camTan = new Vector3();
   private onVisibility = () => {
     if (document.hidden) {
       cancelAnimationFrame(this.raf);
@@ -353,14 +360,43 @@ export class EarthRunApp {
       // the horizon stays level across the whole sphere (poles included).
       const up = this.player.up;
       const fwd = this.player.forward;
+      // In town the camera rises over the rooftops — a ground-level cam
+      // jammed between cottages/poles clips through everything.
+      let cityness = 0;
+      for (const a of this.landmarks.anchors) {
+        if (up.dot(a.dir) > CITY_CAM_COS) {
+          cityness = 1;
+          break;
+        }
+      }
+      const camH = CAM_HEIGHT + (CAM_HEIGHT_CITY - CAM_HEIGHT) * cityness;
+      const camD = CAM_DIST + (CAM_DIST_CITY - CAM_DIST) * cityness;
       // Based on the player's actual radial position so the camera rides
       // up and over mountain terrain with them.
       this.camTarget
         .copy(this.player.group.position)
-        .addScaledVector(up, CAM_HEIGHT)
-        .addScaledVector(fwd, -CAM_DIST);
+        .addScaledVector(up, camH)
+        .addScaledVector(fwd, -camD);
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
       cam.position.lerp(this.camTarget, k);
+      // The camera itself respects building columns: push its ground
+      // projection out of any keep-out disc.
+      const camR = cam.position.length();
+      this.camDir.copy(cam.position).normalize();
+      for (const c of colliders) {
+        const d = this.camDir.dot(c.dir);
+        if (d > c.minDot) {
+          const minTheta = Math.acos(Math.min(1, c.minDot));
+          this.camTan.copy(this.camDir).addScaledVector(c.dir, -d);
+          if (this.camTan.lengthSq() < 1e-10) continue;
+          this.camTan.normalize();
+          this.camDir
+            .copy(c.dir)
+            .multiplyScalar(Math.cos(minTheta))
+            .addScaledVector(this.camTan, Math.sin(minTheta));
+        }
+      }
+      cam.position.copy(this.camDir).multiplyScalar(camR);
       cam.up.copy(up);
       // Look well past the runner so the horizon sits high in frame
       // (street-level feel, like the reference).
