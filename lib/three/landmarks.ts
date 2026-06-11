@@ -312,6 +312,8 @@ export function buildLandmarks(): Landmarks {
       .addScaledVector(north, 0.022)
       .normalize();
     holder.position.copy(p).multiplyScalar(0.998);
+    // Monumental scale: buildings should tower over the runner (0.05).
+    holder.scale.setScalar(1.5);
     anchor.position.copy(p);
     anchor.lookAt(p.x * 2, p.y * 2, p.z * 2);
     holder.quaternion.copy(anchor.quaternion);
@@ -352,12 +354,13 @@ export function buildLandmarks(): Landmarks {
       tmp.lookAt(p.x * 2, p.y * 2, p.z * 2);
       tmp.rotateX(Math.PI / 2);
       tmp.rotateY(rng() * Math.PI);
-      // Body sits half-height above ground; roof on top. Tiny cottages skip
-      // ink hulls — the landmark hulls carry the style at this scale.
-      tmp.position.copy(p).addScaledVector(p, 0.006);
+      // 2.2x: a cottage must at least match the runner (0.05) or the scale
+      // story breaks. Body sits half-height above ground; roof on top.
+      tmp.scale.setScalar(2.2);
+      tmp.position.copy(p).addScaledVector(p, 0.013);
       tmp.updateMatrix();
       bodies.setMatrixAt(i, tmp.matrix);
-      tmp.position.copy(p).addScaledVector(p, 0.017);
+      tmp.position.copy(p).addScaledVector(p, 0.037);
       tmp.updateMatrix();
       roofs.setMatrixAt(i, tmp.matrix);
       i++;

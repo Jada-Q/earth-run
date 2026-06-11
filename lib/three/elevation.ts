@@ -13,27 +13,28 @@ interface ElevMap {
 }
 
 let map: ElevMap | null = null;
-let loading = false;
+let loadPromise: Promise<void> | null = null;
 
-export function ensureElevationLoaded(): void {
-  if (loading || map) return;
-  loading = true;
-  void (async () => {
-    try {
-      const res = await fetch("/textures/elevation.png");
-      const bmp = await createImageBitmap(await res.blob());
-      const canvas = document.createElement("canvas");
-      canvas.width = bmp.width;
-      canvas.height = bmp.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(bmp, 0, 0);
-      const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-      map = { data: img.data, w: bmp.width, h: bmp.height };
-    } catch {
-      // No elevation → flat ground. Degrades gracefully.
-    }
-  })();
+export function ensureElevationLoaded(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        const res = await fetch("/textures/elevation.png");
+        const bmp = await createImageBitmap(await res.blob());
+        const canvas = document.createElement("canvas");
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(bmp, 0, 0);
+        const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+        map = { data: img.data, w: bmp.width, h: bmp.height };
+      } catch {
+        // No elevation → flat ground. Degrades gracefully.
+      }
+    })();
+  }
+  return loadPromise;
 }
 
 /** Terrain height (world units above the unit sphere) at a surface

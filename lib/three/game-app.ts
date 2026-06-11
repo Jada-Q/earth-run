@@ -31,6 +31,7 @@ import { buildIntroLetters, type IntroLetters } from "./intro-letters";
 import { buildLandmarks, type Landmarks } from "./landmarks";
 import { buildNpcs, type Npcs } from "./npcs";
 import { buildStreetProps, type StreetProps } from "./streetprops";
+import { buildTrees, type Trees } from "./trees";
 import {
   ConeGeometry,
   Mesh as ThreeMesh,
@@ -91,6 +92,7 @@ export class EarthRunApp {
   private landmarks: Landmarks;
   private npcs: Npcs;
   private streetProps: StreetProps;
+  private trees: Trees;
   private introLetters: IntroLetters | null = null;
   private guideArrow: ThreeMesh;
   private guideDir = new Vector3();
@@ -143,6 +145,8 @@ export class EarthRunApp {
     this.spinGroup.add(this.npcs.group);
     this.streetProps = buildStreetProps(this.landmarks);
     this.spinGroup.add(this.streetProps.group);
+    this.trees = buildTrees(this.landmarks);
+    this.spinGroup.add(this.trees.group);
     this.guideArrow = new ThreeMesh(
       new ConeGeometry(0.007, 0.02, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
@@ -343,6 +347,7 @@ export class EarthRunApp {
     this.landmarks.dispose();
     this.npcs.dispose();
     this.streetProps.dispose();
+    this.trees.dispose();
     this.introLetters?.dispose();
     this.guideArrow.geometry.dispose();
     (this.guideArrow.material as MeshBasicMaterial).dispose();
