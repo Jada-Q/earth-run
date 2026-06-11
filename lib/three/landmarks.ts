@@ -43,6 +43,13 @@ const TEAL = "#2e5d66";
 const GREEN = "#3e7d58";
 const CREAM = "#efe7cf";
 const INK_DARK = "#3a4d48";
+// Signature colors — landmark recognition is silhouette × COLOR. Muted so
+// the gold CTA keeps its pull, but Tokyo Tower without its international
+// orange is just a dark thing on legs.
+const TOWER_ORANGE = "#d2693e";
+const WHITE = "#f4f1e8";
+const PEARL_ROSE = "#c4798c";
+const FLAME_GOLD = "#d9b25e";
 
 export interface Landmarks {
   group: Group;
@@ -98,21 +105,37 @@ export function buildLandmarks(): Landmarks {
   // tripod, Eiffel's splayed legs, Liberty's crown + tablet.
   const builders: Record<string, (g: Group) => void> = {
     tokyo(g) {
-      // Tokyo Tower: four splayed legs, two observation decks, antenna.
+      // Tokyo Tower: international orange with white bands — the color IS
+      // the recognition. Splayed orange legs, tapering banded shaft, white
+      // main deck at the waist, small upper deck, striped antenna.
       for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
         const leg = new Group();
-        leg.position.set(sx * 0.016, 0, sz * 0.016);
-        // Tops lean INWARD to meet the shaft (outward = capsized look).
-        leg.rotation.z = sx * 0.3;
-        leg.rotation.x = -sz * 0.3;
-        prim(leg, new BoxGeometry(0.007, 0.042, 0.007), TEAL, 0, 0.02, 0);
+        leg.position.set(sx * 0.015, 0, sz * 0.015);
+        leg.rotation.z = sx * 0.34;
+        leg.rotation.x = -sz * 0.34;
+        prim(leg, new BoxGeometry(0.0065, 0.04, 0.0065), TOWER_ORANGE, 0, 0.019, 0);
         g.add(leg);
       }
-      prim(g, new BoxGeometry(0.022, 0.026, 0.022), TEAL, 0, 0.056, 0);
-      prim(g, new CylinderGeometry(0.017, 0.02, 0.008, 10), PAPER, 0, 0.047, 0); // main deck
-      prim(g, new BoxGeometry(0.012, 0.026, 0.012), TEAL, 0, 0.082, 0);
-      prim(g, new CylinderGeometry(0.01, 0.011, 0.006, 10), PAPER, 0, 0.097, 0); // top deck
-      prim(g, new CylinderGeometry(0.0022, 0.0022, 0.034, 6), PAPER, 0, 0.117, 0);
+      // Tapering shaft with alternating orange/white bands.
+      const bands: Array<[number, number, string]> = [
+        [0.021, 0.012, TOWER_ORANGE],
+        [0.019, 0.004, WHITE],
+        [0.017, 0.011, TOWER_ORANGE],
+        [0.015, 0.004, WHITE],
+        [0.013, 0.011, TOWER_ORANGE],
+      ];
+      let y = 0.036;
+      for (const [w, h, c] of bands) {
+        prim(g, new BoxGeometry(w, h, w), c, 0, y + h / 2, 0);
+        y += h;
+      }
+      prim(g, new BoxGeometry(0.026, 0.007, 0.026), WHITE, 0, 0.0395, 0); // main deck
+      prim(g, new BoxGeometry(0.0105, 0.01, 0.0105), TOWER_ORANGE, 0, y + 0.005, 0);
+      prim(g, new BoxGeometry(0.014, 0.005, 0.014), WHITE, 0, y + 0.0125, 0); // top deck
+      // Striped antenna.
+      prim(g, new CylinderGeometry(0.002, 0.0024, 0.014, 6), TOWER_ORANGE, 0, y + 0.022, 0);
+      prim(g, new CylinderGeometry(0.0016, 0.002, 0.012, 6), WHITE, 0, y + 0.035, 0);
+      prim(g, new CylinderGeometry(0.0012, 0.0016, 0.01, 6), TOWER_ORANGE, 0, y + 0.046, 0);
     },
     la(g) {
       // Hollywood: letter-block sign on a green hill ridge + palms.
@@ -163,7 +186,7 @@ export function buildLandmarks(): Landmarks {
         prim(g, new BoxGeometry(0.0016, 0.006, 0.0016), GREEN, i * 0.0024, 0.0795, 0);
       }
       prim(g, new BoxGeometry(0.004, 0.024, 0.004), GREEN, 0.0085, 0.078, -0.002); // torch arm
-      prim(g, new SphereGeometry(0.0036, 8, 6), CREAM, 0.0085, 0.0925, -0.002); // flame
+      prim(g, new SphereGeometry(0.0036, 8, 6), FLAME_GOLD, 0.0085, 0.0925, -0.002); // flame
       prim(g, new BoxGeometry(0.004, 0.012, 0.008), GREEN, -0.009, 0.058, 0.003); // tablet
     },
     london(g) {
@@ -256,10 +279,10 @@ export function buildLandmarks(): Landmarks {
         leg.add(l);
         g.add(leg);
       }
-      prim(g, new SphereGeometry(0.0145, 16, 12), TEAL, 0, 0.032, 0); // lower sphere
+      prim(g, new SphereGeometry(0.0145, 16, 12), PEARL_ROSE, 0, 0.032, 0); // lower sphere
       prim(g, new CylinderGeometry(0.0036, 0.0044, 0.038, 8), PAPER, 0, 0.052, 0);
-      prim(g, new SphereGeometry(0.0095, 14, 10), TEAL, 0, 0.073, 0); // upper sphere
-      prim(g, new SphereGeometry(0.004, 10, 8), TEAL, 0, 0.0865, 0); // top bead
+      prim(g, new SphereGeometry(0.0095, 14, 10), PEARL_ROSE, 0, 0.073, 0); // upper sphere
+      prim(g, new SphereGeometry(0.004, 10, 8), PEARL_ROSE, 0, 0.0865, 0); // top bead
       prim(g, new CylinderGeometry(0.0014, 0.0014, 0.022, 4), PAPER, 0, 0.1, 0);
     },
   };
