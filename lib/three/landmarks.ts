@@ -309,8 +309,23 @@ export function buildLandmarks(): Landmarks {
   // ---------------------------------------------------------- placement --
   const anchors: Landmarks["anchors"] = [];
   const colliders: Collider[] = [];
-  const LANDMARK_R = Math.cos(0.014);
-  const HOUSE_R = Math.cos(0.009);
+  // Per-monument keep-out radius (rad) — matched to each footprint after
+  // the 1.5x scale. All smaller than the 5.5° checkpoint pass radius, so
+  // racing is unaffected.
+  const FOOTPRINT: Record<string, number> = {
+    tokyo: 0.024,
+    la: 0.05,
+    chicago: 0.018,
+    nyc: 0.02,
+    london: 0.013,
+    paris: 0.025,
+    rome: 0.038,
+    istanbul: 0.027,
+    dubai: 0.018,
+    delhi: 0.028,
+    shanghai: 0.022,
+  };
+  const HOUSE_R = Math.cos(0.016);
   const anchor = new Object3D();
   const pole = new Vector3(0, 1, 0);
 
@@ -331,7 +346,10 @@ export function buildLandmarks(): Landmarks {
     holder.position.copy(p).multiplyScalar(0.998);
     // Monumental scale: buildings should tower over the runner (0.05).
     holder.scale.setScalar(1.5);
-    colliders.push({ dir: p.clone(), minDot: LANDMARK_R });
+    colliders.push({
+      dir: p.clone(),
+      minDot: Math.cos(FOOTPRINT[c.key] ?? 0.018),
+    });
     anchor.position.copy(p);
     anchor.lookAt(p.x * 2, p.y * 2, p.z * 2);
     holder.quaternion.copy(anchor.quaternion);

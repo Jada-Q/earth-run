@@ -323,11 +323,18 @@ export class EarthRunApp {
       if (frame.chop && this.trees.tryChop(this.player.up)) {
         this.player.chop();
       }
-      this.player.update(dt, frame, [
+      const colliders = [
         ...this.landmarks.colliders,
         ...this.trees.colliders(),
-      ]);
-      this.companion?.update(dt, now, this.player.up, this.player.forward);
+      ];
+      this.player.update(dt, frame, colliders);
+      this.companion?.update(
+        dt,
+        now,
+        this.player.up,
+        this.player.forward,
+        colliders,
+      );
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
       const t = this.race.targetTangent(this.player.up, this.guideDir);

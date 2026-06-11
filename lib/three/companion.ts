@@ -25,7 +25,13 @@ const SMOOTH = 4.5;
 
 export interface Companion {
   group: Group;
-  update(dt: number, nowMs: number, playerUp: Vector3, playerFwd: Vector3): void;
+  update(
+    dt: number,
+    nowMs: number,
+    playerUp: Vector3,
+    playerFwd: Vector3,
+    colliders?: ReadonlyArray<{ dir: Vector3; minDot: number }>,
+  ): void;
   dispose(): void;
 }
 
@@ -99,6 +105,7 @@ export function buildCompanion(): Companion {
   group.scale.setScalar(SCALE);
 
   const dir = new Vector3(1, 0, 0); // current position on the sphere
+  const tangent = new Vector3();
   const target = new Vector3();
   const fwdT = new Vector3();
   const side = new Vector3();
@@ -109,7 +116,7 @@ export function buildCompanion(): Companion {
 
   return {
     group,
-    update(dt, nowMs, playerUp, playerFwd) {
+    update(dt, nowMs, playerUp, playerFwd, colliders) {
       side.copy(playerFwd).cross(playerUp); // right of the runner
       target
         .copy(playerUp)
@@ -124,6 +131,24 @@ export function buildCompanion(): Companion {
       const k = 1 - Math.exp(-dt * SMOOTH);
       dir.lerp(target, k).normalize();
       moving = moving * 0.9 + (1 - Math.min(1, before)) * 4000 * 0.1;
+
+      // The dog can't walk through buildings either: clamp onto the
+      // keep-out boundary (exact placement: cos/sin recompose).
+      if (colliders) {
+        for (const c of colliders) {
+          const d = dir.dot(c.dir);
+          if (d > c.minDot) {
+            const minTheta = Math.acos(Math.min(1, c.minDot));
+            tangent.copy(dir).addScaledVector(c.dir, -d);
+            if (tangent.lengthSq() < 1e-10) continue;
+            tangent.normalize();
+            dir
+              .copy(c.dir)
+              .multiplyScalar(Math.cos(minTheta))
+              .addScaledVector(tangent, Math.sin(minTheta));
+          }
+        }
+      }
 
       // Face the runner's heading, stand on the terrain, trot-bounce.
       fwdT.copy(playerFwd).addScaledVector(dir, -dir.dot(playerFwd)).normalize();

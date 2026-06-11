@@ -127,7 +127,8 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
       walkers.push({
         group: g,
         anchorIdx: idx,
-        radius: 0.018 + rng() * 0.02,
+        // Inside the cottage ring (0.028+) so strolls never clip houses.
+        radius: 0.012 + rng() * 0.012,
         speed: (rng() > 0.5 ? 1 : -1) * (0.12 + rng() * 0.15),
         angle: rng() * Math.PI * 2,
         bobFreq: 9 + rng() * 4,
