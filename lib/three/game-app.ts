@@ -278,8 +278,8 @@ export class EarthRunApp {
       if (t) {
         this.guideArrow.visible = true;
         this.guideArrow.position
-          .copy(this.player.up)
-          .multiplyScalar(1.004)
+          .copy(this.player.group.position)
+          .addScaledVector(this.player.up, 0.006)
           .addScaledVector(t, 0.075);
         this.guideQuat.setFromUnitVectors(this.guideArrow.up, t);
         this.guideArrow.quaternion.copy(this.guideQuat);
@@ -290,9 +290,11 @@ export class EarthRunApp {
       // the horizon stays level across the whole sphere (poles included).
       const up = this.player.up;
       const fwd = this.player.forward;
+      // Based on the player's actual radial position so the camera rides
+      // up and over mountain terrain with them.
       this.camTarget
-        .copy(up)
-        .multiplyScalar(1 + CAM_HEIGHT)
+        .copy(this.player.group.position)
+        .addScaledVector(up, CAM_HEIGHT)
         .addScaledVector(fwd, -CAM_DIST);
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
       cam.position.lerp(this.camTarget, k);

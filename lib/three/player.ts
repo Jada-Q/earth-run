@@ -7,6 +7,7 @@
 import { Group, Matrix4, Quaternion, Vector3 } from "three";
 import { latLngToVec3 } from "./geo";
 import { buildRunner, type Runner, type RunnerPose } from "./runner";
+import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 
 const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
 const BACK_SPEED = 0.09;
@@ -38,6 +39,7 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
   const group = new Group();
   const runner: Runner = buildRunner();
   group.add(runner.group);
+  ensureElevationLoaded();
 
   // --- initial frame at the spawn point, facing east -----------------------
   const up = latLngToVec3(spawnLat, spawnLng, new Vector3());
@@ -63,7 +65,9 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
   const apply = () => {
     up.set(0, 1, 0).applyQuaternion(q);
     fwd.set(1, 0, 0).applyQuaternion(q);
-    group.position.copy(up).multiplyScalar(1 + jumpH);
+    // Stand on the displaced terrain (cities are baked flat, so this is 0
+    // at spawn and rises smoothly in the mountains).
+    group.position.copy(up).multiplyScalar(1 + groundHeightAt(up) + jumpH);
     group.quaternion.copy(q);
   };
   apply();

@@ -9,7 +9,7 @@
 // rasterize world-atlas land at equirectangular projection in ~1s, then a
 // two-pass chamfer distance transform for the SDF.
 
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { geoPath, geoEquirectangular } from "d3-geo";
 import { feature } from "topojson-client";
 import { createRequire } from "node:module";
@@ -258,6 +258,68 @@ function buildCityLights(mask) {
   return out;
 }
 
+// ------------------------------------------------------------- elevation --
+// Real Earth terrain from scripts/assets/earth-topology-raw.png
+// (three-globe's SRTM-derived heightmap, 2048x1024 grayscale; SRTM data is
+// NASA public domain). Checkpoint cities get flattened with a smooth
+// falloff so gates, landmarks and residents keep sitting on level ground.
+const ELEV_RAW = join(__dirname, "assets", "earth-topology-raw.png");
+const ELEV_OUT = join(__dirname, "..", "public", "textures", "elevation.png");
+
+// Race cities (must match race.ts / landmarks.ts).
+const FLAT_CITIES = [
+  [35.7, 139.7], [34.1, -118.2], [41.9, -87.6], [40.7, -74.0],
+  [51.5, -0.1], [48.9, 2.3], [41.9, 12.5], [41.0, 28.9],
+  [25.2, 55.3], [28.6, 77.2], [31.2, 121.5],
+];
+const FLAT_RADIUS_DEG = 3.0;
+
+async function bakeElevation(mask) {
+  const imgRaw = await loadImage(ELEV_RAW);
+  const c = createCanvas(W, H);
+  const ctx = c.getContext("2d");
+  ctx.drawImage(imgRaw, 0, 0, W, H);
+  const { data } = ctx.getImageData(0, 0, W, H);
+
+  const elev = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const lat = 90 - (y / H) * 180;
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      // Land only — the raw map has Antarctic shelf glow over sea ice.
+      if (!mask[i]) {
+        elev[i] = 0;
+        continue;
+      }
+      let v = data[i * 4] / 255;
+      // City flattening: suppress within FLAT_RADIUS_DEG, smooth falloff.
+      const lng = (x / W) * 360 - 180;
+      for (const [clat, clng] of FLAT_CITIES) {
+        let dLng = Math.abs(lng - clng);
+        if (dLng > 180) dLng = 360 - dLng;
+        const dist = Math.hypot(lat - clat, dLng * Math.cos((clat * Math.PI) / 180));
+        if (dist < FLAT_RADIUS_DEG) {
+          const t = dist / FLAT_RADIUS_DEG;
+          v *= t * t; // 0 at the city, eases back to full
+        }
+      }
+      elev[i] = Math.round(Math.min(1, v) * 255);
+    }
+  }
+
+  const outC = createCanvas(W, H);
+  const octx2 = outC.getContext("2d");
+  const img2 = octx2.createImageData(W, H);
+  for (let i = 0; i < W * H; i++) {
+    img2.data[i * 4] = elev[i];
+    img2.data[i * 4 + 1] = elev[i];
+    img2.data[i * 4 + 2] = elev[i];
+    img2.data[i * 4 + 3] = 255;
+  }
+  octx2.putImageData(img2, 0, 0);
+  writeFileSync(ELEV_OUT, outC.toBuffer("image/png"));
+}
+
 // ------------------------------------------------------------------ main --
 console.time("rasterize");
 const mask = rasterizeLand();
@@ -274,6 +336,10 @@ console.timeEnd("vegetation");
 console.time("cities");
 const city = buildCityLights(mask);
 console.timeEnd("cities");
+
+console.time("elevation");
+await bakeElevation(mask);
+console.timeEnd("elevation");
 
 
 const out = createCanvas(W, H);
