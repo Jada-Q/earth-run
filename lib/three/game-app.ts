@@ -28,6 +28,8 @@ import { buildPlayer, type Player } from "./player";
 import { attachInput, type GameInput } from "./input";
 import { buildRace, type Race, type RaceHud } from "./race";
 import { buildIntroLetters, type IntroLetters } from "./intro-letters";
+import { buildLandmarks, type Landmarks } from "./landmarks";
+import { buildNpcs, type Npcs } from "./npcs";
 import {
   ConeGeometry,
   Mesh as ThreeMesh,
@@ -85,6 +87,8 @@ export class EarthRunApp {
   private player: Player | null = null;
   private input: GameInput | null = null;
   private race: Race;
+  private landmarks: Landmarks;
+  private npcs: Npcs;
   private introLetters: IntroLetters | null = null;
   private guideArrow: ThreeMesh;
   private guideDir = new Vector3();
@@ -130,6 +134,11 @@ export class EarthRunApp {
     // orbit view, world frame (identity) during play.
     this.race = buildRace();
     this.spinGroup.add(this.race.group);
+    // Landmarks + residents live in the planet's frame too.
+    this.landmarks = buildLandmarks();
+    this.spinGroup.add(this.landmarks.group);
+    this.npcs = buildNpcs(this.landmarks);
+    this.spinGroup.add(this.npcs.group);
     this.guideArrow = new ThreeMesh(
       new ConeGeometry(0.012, 0.034, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.75 }),
@@ -301,6 +310,7 @@ export class EarthRunApp {
     this.birds.update(this.params.cloudSpeed, now);
     this.whale.update(now);
     this.satellite.update(this.params.cloudSpeed, now);
+    this.npcs.update(now, dt);
 
     this.planet.applyParams(this.params, this.lightDir);
     this.renderer.render(this.scene, cam);
@@ -322,6 +332,8 @@ export class EarthRunApp {
     this.whale.dispose();
     this.satellite.dispose();
     this.race.dispose();
+    this.landmarks.dispose();
+    this.npcs.dispose();
     this.introLetters?.dispose();
     this.guideArrow.geometry.dispose();
     (this.guideArrow.material as MeshBasicMaterial).dispose();
