@@ -248,6 +248,15 @@ export class EarthRunApp {
     return null;
   }
 
+  /** Dev teleport — rebuild the runner at given coords (debug pane use). */
+  debugPlacePlayer(lat: number, lng: number): void {
+    if (this.mode !== "play" || !this.player) return;
+    this.player.dispose();
+    this.scene.remove(this.player.group);
+    this.player = buildPlayer(lat, lng, this.outfit);
+    this.scene.add(this.player.group);
+  }
+
   /** Reset the lap and put the runner back on the start line. */
   restartRace(): void {
     if (this.mode !== "play" || !this.player) return;

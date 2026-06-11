@@ -271,6 +271,10 @@ export function buildPlayer(
 
       // Collision: solid obstacles push the runner back out along the
       // great circle (skip while airborne — you fly OVER buildings).
+      // Sign note: rotating about (up × dir) by +δ moves up TOWARD dir
+      // (Rodrigues: a×up ∝ dir − up·d). Ejecting outward therefore needs
+      // δ = θ − minθ (negative). The first version had it inverted and
+      // SUCKED the runner into building centers.
       if (colliders && jumpH === 0) {
         up.set(0, 1, 0).applyQuaternion(q);
         for (const c of colliders) {
@@ -279,9 +283,15 @@ export function buildPlayer(
             const theta = Math.acos(Math.min(1, d));
             const minTheta = Math.acos(Math.min(1, c.minDot));
             axis.copy(up).cross(c.dir);
-            if (axis.lengthSq() < 1e-10) continue; // dead center — let it be
+            if (axis.lengthSq() < 1e-10) {
+              // Dead center (e.g. landed on the exact spot) — kick out
+              // along the facing direction instead of dividing by zero.
+              fwd.set(1, 0, 0).applyQuaternion(q);
+              axis.copy(fwd).cross(c.dir);
+              if (axis.lengthSq() < 1e-10) continue;
+            }
             axis.normalize();
-            step.setFromAxisAngle(axis, minTheta - theta);
+            step.setFromAxisAngle(axis, theta - minTheta);
             q.premultiply(step);
             up.set(0, 1, 0).applyQuaternion(q);
           }
