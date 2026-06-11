@@ -97,7 +97,7 @@ function buildBoat(): {
     g.add(m);
     const hull = new Mesh(geo, inkMat);
     hull.position.set(...pos);
-    hull.scale.setScalar(1.22);
+    hull.scale.setScalar(1.1);
     g.add(hull);
   }
   g.scale.setScalar(SHIP_SCALE);

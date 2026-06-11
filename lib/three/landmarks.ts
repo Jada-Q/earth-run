@@ -86,7 +86,7 @@ export function buildLandmarks(): Landmarks {
     const hull = new Mesh(geo, inkMat);
     hull.position.set(x, y, z);
     hull.rotation.y = ry;
-    hull.scale.setScalar(1.12);
+    hull.scale.setScalar(1.07);
     parent.add(hull);
   };
 
@@ -104,9 +104,9 @@ export function buildLandmarks(): Landmarks {
       // Hollywood-ish hill sign + two palms.
       prim(g, new BoxGeometry(0.07, 0.018, 0.012), PAPER, 0, 0.026, 0);
       prim(g, new CylinderGeometry(0.003, 0.004, 0.034, 5), TEAL, -0.045, 0.017, 0.012);
-      prim(g, new SphereGeometry(0.012, 6, 5), GREEN, -0.045, 0.04, 0.012);
+      prim(g, new SphereGeometry(0.012, 10, 8), GREEN, -0.045, 0.04, 0.012);
       prim(g, new CylinderGeometry(0.003, 0.004, 0.028, 5), TEAL, 0.046, 0.014, -0.01);
-      prim(g, new SphereGeometry(0.01, 6, 5), GREEN, 0.046, 0.033, -0.01);
+      prim(g, new SphereGeometry(0.01, 10, 8), GREEN, 0.046, 0.033, -0.01);
     },
     chicago(g) {
       // Willis Tower: stepped dark prism + twin antennae.
@@ -121,7 +121,7 @@ export function buildLandmarks(): Landmarks {
       prim(g, new BoxGeometry(0.016, 0.034, 0.012), GREEN, 0, 0.04, 0);
       prim(g, new BoxGeometry(0.011, 0.011, 0.011), GREEN, 0, 0.062, 0);
       prim(g, new BoxGeometry(0.005, 0.028, 0.005), GREEN, 0.011, 0.068, 0);
-      prim(g, new SphereGeometry(0.0045, 5, 4), CREAM, 0.011, 0.084, 0);
+      prim(g, new SphereGeometry(0.0045, 8, 6), CREAM, 0.011, 0.084, 0);
     },
     london(g) {
       // Big Ben: clock tower + pointed cap.
@@ -138,14 +138,14 @@ export function buildLandmarks(): Landmarks {
     },
     rome(g) {
       // Colosseum: open-ended elliptical drum.
-      const drum = new CylinderGeometry(0.03, 0.032, 0.024, 12, 1, true);
+      const drum = new CylinderGeometry(0.03, 0.032, 0.024, 20, 1, true);
       prim(g, drum, PAPER, 0, 0.012, 0);
       g.scale.z = 0.8; // slightly elliptical
     },
     istanbul(g) {
       // Hagia Sophia: dome + two minarets.
       prim(g, new BoxGeometry(0.04, 0.018, 0.04), PAPER, 0, 0.009, 0);
-      prim(g, new SphereGeometry(0.02, 8, 6), TEAL, 0, 0.026, 0);
+      prim(g, new SphereGeometry(0.02, 14, 10), TEAL, 0, 0.026, 0);
       prim(g, new CylinderGeometry(0.0025, 0.0025, 0.05, 5), PAPER, -0.03, 0.025, 0.02);
       prim(g, new CylinderGeometry(0.0025, 0.0025, 0.05, 5), PAPER, 0.03, 0.025, -0.02);
       prim(g, new ConeGeometry(0.004, 0.01, 5), TEAL, -0.03, 0.055, 0.02);
@@ -168,8 +168,8 @@ export function buildLandmarks(): Landmarks {
     shanghai(g) {
       // Oriental Pearl: column with two spheres.
       prim(g, new CylinderGeometry(0.004, 0.006, 0.08, 6), PAPER, 0, 0.04, 0);
-      prim(g, new SphereGeometry(0.013, 8, 6), TEAL, 0, 0.028, 0);
-      prim(g, new SphereGeometry(0.009, 8, 6), TEAL, 0, 0.066, 0);
+      prim(g, new SphereGeometry(0.013, 14, 10), TEAL, 0, 0.028, 0);
+      prim(g, new SphereGeometry(0.009, 14, 10), TEAL, 0, 0.066, 0);
       prim(g, new CylinderGeometry(0.0018, 0.0018, 0.02, 4), PAPER, 0, 0.088, 0);
     },
   };

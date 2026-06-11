@@ -60,7 +60,7 @@ export interface Race {
 export function buildRace(): Race {
   const group = new Group();
 
-  const ringGeo = new TorusGeometry(0.032, 0.0045, 8, 32);
+  const ringGeo = new TorusGeometry(0.032, 0.0045, 12, 48);
   const beaconGeo = new CylinderGeometry(0.006, 0.012, 0.16, 6, 1, true);
   const ringMatIdle = new MeshBasicMaterial({
     color: INK,

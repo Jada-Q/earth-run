@@ -49,8 +49,8 @@ const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
 const ENTER_MS = 900;
 const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
-const CAM_DIST = 0.52; // behind the runner
-const CAM_HEIGHT = 0.26; // above the surface
+const CAM_DIST = 0.36; // behind the runner
+const CAM_HEIGHT = 0.17; // above the surface
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
 type Mode = "orbit" | "entering" | "play";
@@ -140,8 +140,8 @@ export class EarthRunApp {
     this.npcs = buildNpcs(this.landmarks);
     this.spinGroup.add(this.npcs.group);
     this.guideArrow = new ThreeMesh(
-      new ConeGeometry(0.012, 0.034, 4),
-      new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.75 }),
+      new ConeGeometry(0.007, 0.02, 4),
+      new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
     );
     this.guideArrow.visible = false;
     this.scene.add(this.guideArrow);

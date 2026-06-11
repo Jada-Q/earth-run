@@ -75,7 +75,7 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
     parent.add(m);
     const hull = new Mesh(geo, inkMat);
     hull.position.set(x, y, z);
-    hull.scale.setScalar(1.16);
+    hull.scale.setScalar(1.08);
     parent.add(hull);
   };
 
