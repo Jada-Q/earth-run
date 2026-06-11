@@ -50,6 +50,11 @@ const TOWER_ORANGE = "#d2693e";
 const WHITE = "#f4f1e8";
 const PEARL_ROSE = "#c4798c";
 const FLAME_GOLD = "#d9b25e";
+const SANDSTONE_RED = "#c08a6d"; // India Gate
+const SOPHIA_ROSE = "#cfa18d"; // Hagia Sophia walls
+const BURJ_SILVER = "#c4d0d2";
+const WILLIS_BLACK = "#2b3a3d";
+const BEN_LIMESTONE = "#d6c79e";
 
 export interface Landmarks {
   group: Group;
@@ -164,7 +169,7 @@ export function buildLandmarks(): Landmarks {
           prim(
             g,
             new BoxGeometry(tube, h, tube),
-            TEAL,
+            WILLIS_BLACK,
             (ix - 1) * tube,
             h / 2,
             (iz - 1) * tube,
@@ -192,11 +197,11 @@ export function buildLandmarks(): Landmarks {
     london(g) {
       // Big Ben: slender shaft, proud cream clock stage on all faces,
       // belfry, pyramidal spire with finial.
-      prim(g, new BoxGeometry(0.015, 0.06, 0.015), PAPER, 0, 0.03, 0);
+      prim(g, new BoxGeometry(0.015, 0.06, 0.015), BEN_LIMESTONE, 0, 0.03, 0);
       prim(g, new BoxGeometry(0.019, 0.014, 0.019), CREAM, 0, 0.066, 0); // clock stage
       prim(g, new BoxGeometry(0.021, 0.008, 0.008), INK_DARK, 0, 0.066, 0); // face shadow x
       prim(g, new BoxGeometry(0.008, 0.008, 0.021), INK_DARK, 0, 0.066, 0); // face shadow z
-      prim(g, new BoxGeometry(0.016, 0.01, 0.016), PAPER, 0, 0.078, 0); // belfry
+      prim(g, new BoxGeometry(0.016, 0.01, 0.016), BEN_LIMESTONE, 0, 0.078, 0); // belfry
       prim(g, new ConeGeometry(0.011, 0.02, 4), TEAL, 0, 0.093, Math.PI / 4);
       prim(g, new CylinderGeometry(0.001, 0.001, 0.008, 4), CREAM, 0, 0.106, 0);
     },
@@ -230,11 +235,11 @@ export function buildLandmarks(): Landmarks {
     istanbul(g) {
       // Hagia Sophia: broad base, half-dome shoulders on four sides, main
       // dome on a drum, four corner minarets with cone caps.
-      prim(g, new BoxGeometry(0.042, 0.016, 0.042), PAPER, 0, 0.008, 0);
+      prim(g, new BoxGeometry(0.042, 0.016, 0.042), SOPHIA_ROSE, 0, 0.008, 0);
       for (const [dx, dz] of [[0.017, 0], [-0.017, 0], [0, 0.017], [0, -0.017]] as const) {
         prim(g, new SphereGeometry(0.011, 12, 8), TEAL, dx, 0.018, dz);
       }
-      prim(g, new CylinderGeometry(0.015, 0.016, 0.008, 14), PAPER, 0, 0.02, 0); // drum
+      prim(g, new CylinderGeometry(0.015, 0.016, 0.008, 14), SOPHIA_ROSE, 0, 0.02, 0); // drum
       prim(g, new SphereGeometry(0.0165, 16, 12), TEAL, 0, 0.028, 0); // main dome
       for (const [mx, mz] of [[0.026, 0.026], [0.026, -0.026], [-0.026, 0.026], [-0.026, -0.026]] as const) {
         prim(g, new CylinderGeometry(0.0022, 0.0022, 0.052, 6), PAPER, mx, 0.026, mz);
@@ -247,22 +252,22 @@ export function buildLandmarks(): Landmarks {
       for (let k = 0; k < 3; k++) {
         const wing = new Group();
         wing.rotation.y = (k * 2 * Math.PI) / 3;
-        prim(wing, new BoxGeometry(0.009, 0.038, 0.022), CREAM, 0, 0.019, 0.011);
-        prim(wing, new BoxGeometry(0.007, 0.06, 0.014), CREAM, 0, 0.03, 0.006);
+        prim(wing, new BoxGeometry(0.009, 0.038, 0.022), BURJ_SILVER, 0, 0.019, 0.011);
+        prim(wing, new BoxGeometry(0.007, 0.06, 0.014), BURJ_SILVER, 0, 0.03, 0.006);
         g.add(wing);
       }
-      prim(g, new BoxGeometry(0.011, 0.082, 0.011), CREAM, 0, 0.041, 0);
-      prim(g, new BoxGeometry(0.007, 0.022, 0.007), CREAM, 0, 0.093, 0);
-      prim(g, new CylinderGeometry(0.0016, 0.0016, 0.04, 6), CREAM, 0, 0.122, 0);
+      prim(g, new BoxGeometry(0.011, 0.082, 0.011), BURJ_SILVER, 0, 0.041, 0);
+      prim(g, new BoxGeometry(0.007, 0.022, 0.007), BURJ_SILVER, 0, 0.093, 0);
+      prim(g, new CylinderGeometry(0.0016, 0.0016, 0.04, 6), BURJ_SILVER, 0, 0.122, 0);
     },
     delhi(g) {
       // India Gate: plinth, massive piers, dark arch void, attic with the
       // shallow dome bowl on top.
-      prim(g, new BoxGeometry(0.052, 0.006, 0.024), PAPER, 0, 0.003, 0);
-      prim(g, new BoxGeometry(0.014, 0.042, 0.018), PAPER, -0.017, 0.027, 0);
-      prim(g, new BoxGeometry(0.014, 0.042, 0.018), PAPER, 0.017, 0.027, 0);
+      prim(g, new BoxGeometry(0.052, 0.006, 0.024), SANDSTONE_RED, 0, 0.003, 0);
+      prim(g, new BoxGeometry(0.014, 0.042, 0.018), SANDSTONE_RED, -0.017, 0.027, 0);
+      prim(g, new BoxGeometry(0.014, 0.042, 0.018), SANDSTONE_RED, 0.017, 0.027, 0);
       prim(g, new BoxGeometry(0.02, 0.03, 0.012), INK_DARK, 0, 0.021, 0); // arch void
-      prim(g, new BoxGeometry(0.048, 0.014, 0.02), PAPER, 0, 0.055, 0); // spandrel
+      prim(g, new BoxGeometry(0.048, 0.014, 0.02), SANDSTONE_RED, 0, 0.055, 0); // spandrel
       prim(g, new BoxGeometry(0.036, 0.008, 0.016), CREAM, 0, 0.066, 0); // attic
       prim(g, new CylinderGeometry(0.008, 0.01, 0.005, 12), PAPER, 0, 0.0725, 0); // bowl
     },
