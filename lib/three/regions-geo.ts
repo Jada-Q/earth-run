@@ -38,7 +38,7 @@ const DEFS: GeoRegionDef[] = [
   { name: "Arabian Desert · 阿拉伯沙漠", kind: "desert", lat: 23.5, lng: 46, radiusDeg: 6.5 },
   { name: "The Andes · 安第斯山脉", kind: "range", lat: -20, lng: -68, radiusDeg: 8 },
   // Oceans (huge, lose to everything else)
-  { name: "Pacific Ocean · 太平洋", kind: "ocean", lat: 25, lng: -165, radiusDeg: 32 },
+  { name: "Pacific Ocean · 太平洋", kind: "ocean", lat: 25, lng: -178, radiusDeg: 38 },
   { name: "Atlantic Ocean · 大西洋", kind: "ocean", lat: 45, lng: -38, radiusDeg: 14 },
 ];
 
