@@ -37,8 +37,22 @@ function isVegetated(mask: LandMask, lat: number, lng: number): boolean {
 
 export interface Trees {
   group: Group;
+  /** Chop the nearest standing tree within reach. True if one fell. */
+  tryChop(up: Vector3): boolean;
+  /** Advance falling-tree animations. */
+  update(nowMs: number): void;
   dispose(): void;
 }
+
+interface TreeRec {
+  dir: Vector3;
+  s: number;
+  conifer: boolean;
+  alive: boolean;
+}
+
+const CHOP_REACH_COS = Math.cos(0.014); // ~0.8° — melee range
+const FALL_MS = 500;
 
 export function buildTrees(landmarks: Landmarks): Trees {
   const group = new Group();
@@ -81,11 +95,53 @@ export function buildTrees(landmarks: Landmarks): Trees {
     return seed / 4294967296;
   };
 
+  const recs: TreeRec[] = [];
+  const falls: Array<{ idx: number; start: number }> = [];
+  const tmp = new Object3D();
+  const zero = new Matrix4().makeScale(0, 0, 0);
+  const pos = new Vector3();
+
+  /** Write one tree's matrices at squash factor k (1 = standing, 0 = gone). */
+  const writeTree = (i: number, rec: TreeRec, k: number) => {
+    const ground = 1 + groundHeightAt(rec.dir);
+    const s = rec.s * k;
+    if (k <= 0.02) {
+      // Stump: a short trunk slug, canopy gone.
+      tmp.position.copy(rec.dir).multiplyScalar(ground + rec.s * 0.1);
+      tmp.lookAt(rec.dir.x * 2, rec.dir.y * 2, rec.dir.z * 2);
+      tmp.rotateX(Math.PI / 2);
+      tmp.scale.set(rec.s, rec.s * 0.2, rec.s);
+      tmp.updateMatrix();
+      trunks.setMatrixAt(i, tmp.matrix);
+      for (const m of [cones1, cones2, blobs1, blobs2]) m.setMatrixAt(i, zero);
+      return;
+    }
+    const at = (radial: number, mesh: InstancedMesh) => {
+      tmp.position.copy(rec.dir).multiplyScalar(ground + radial);
+      tmp.lookAt(
+        rec.dir.x * 2 * ground, rec.dir.y * 2 * ground, rec.dir.z * 2 * ground,
+      );
+      tmp.rotateX(Math.PI / 2);
+      tmp.scale.setScalar(s);
+      tmp.updateMatrix();
+      mesh.setMatrixAt(i, tmp.matrix);
+    };
+    at(s * 0.5, trunks);
+    if (rec.conifer) {
+      at(s * 1.3, cones1);
+      at(s * 2.0, cones2);
+      blobs1.setMatrixAt(i, zero);
+      blobs2.setMatrixAt(i, zero);
+    } else {
+      at(s * 1.4, blobs1);
+      at(s * 1.9, blobs2);
+      cones1.setMatrixAt(i, zero);
+      cones2.setMatrixAt(i, zero);
+    }
+  };
+
   void (async () => {
     const [mask] = await Promise.all([loadLandMask(), ensureElevationLoaded()]);
-    const tmp = new Object3D();
-    const zero = new Matrix4().makeScale(0, 0, 0);
-    const pos = new Vector3();
     let i = 0;
 
     const place = (lat: number, lng: number) => {
@@ -96,38 +152,14 @@ export function buildTrees(landmarks: Landmarks): Trees {
         Math.sin(latR),
         -Math.cos(latR) * Math.sin(lngR),
       );
-      const ground = 1 + groundHeightAt(pos);
-      const s = BASE * (0.7 + rng() * 0.8);
-      const conifer = rng() > 0.45;
-      tmp.position.copy(pos).multiplyScalar(ground);
-      tmp.lookAt(pos.x * 2 * ground, pos.y * 2 * ground, pos.z * 2 * ground);
-      tmp.rotateX(Math.PI / 2);
-      tmp.rotateY(rng() * Math.PI * 2);
-      tmp.scale.setScalar(s);
-
-      // trunk
-      tmp.position.copy(pos).multiplyScalar(ground + s * 0.5);
-      tmp.updateMatrix();
-      trunks.setMatrixAt(i, tmp.matrix);
-      if (conifer) {
-        tmp.position.copy(pos).multiplyScalar(ground + s * 1.3);
-        tmp.updateMatrix();
-        cones1.setMatrixAt(i, tmp.matrix);
-        tmp.position.copy(pos).multiplyScalar(ground + s * 2.0);
-        tmp.updateMatrix();
-        cones2.setMatrixAt(i, tmp.matrix);
-        blobs1.setMatrixAt(i, zero);
-        blobs2.setMatrixAt(i, zero);
-      } else {
-        tmp.position.copy(pos).multiplyScalar(ground + s * 1.4);
-        tmp.updateMatrix();
-        blobs1.setMatrixAt(i, tmp.matrix);
-        tmp.position.copy(pos).multiplyScalar(ground + s * 1.9);
-        tmp.updateMatrix();
-        blobs2.setMatrixAt(i, tmp.matrix);
-        cones1.setMatrixAt(i, zero);
-        cones2.setMatrixAt(i, zero);
-      }
+      const rec: TreeRec = {
+        dir: pos.clone(),
+        s: BASE * (0.7 + rng() * 0.8),
+        conifer: rng() > 0.45,
+        alive: true,
+      };
+      recs.push(rec);
+      writeTree(i, rec, 1);
       i++;
     };
 
@@ -180,6 +212,29 @@ export function buildTrees(landmarks: Landmarks): Trees {
 
   return {
     group,
+    tryChop(up: Vector3): boolean {
+      for (let k = 0; k < recs.length; k++) {
+        const rec = recs[k];
+        if (rec.alive && rec.dir.dot(up) > CHOP_REACH_COS) {
+          rec.alive = false;
+          falls.push({ idx: k, start: performance.now() });
+          return true;
+        }
+      }
+      return false;
+    },
+    update(nowMs: number) {
+      if (!falls.length) return;
+      for (let k = falls.length - 1; k >= 0; k--) {
+        const f = falls[k];
+        const t = (nowMs - f.start) / FALL_MS;
+        writeTree(f.idx, recs[f.idx], Math.max(0, 1 - t));
+        if (t >= 1) falls.splice(k, 1);
+      }
+      for (const m of [trunks, cones1, cones2, blobs1, blobs2]) {
+        m.instanceMatrix.needsUpdate = true;
+      }
+    },
     dispose() {
       trunkGeo.dispose();
       coneGeo1.dispose();

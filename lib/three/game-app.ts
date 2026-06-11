@@ -32,6 +32,8 @@ import { buildLandmarks, type Landmarks } from "./landmarks";
 import { buildNpcs, type Npcs } from "./npcs";
 import { buildStreetProps, type StreetProps } from "./streetprops";
 import { buildTrees, type Trees } from "./trees";
+import { buildCompanion, type Companion } from "./companion";
+import type { Outfit } from "./runner";
 import {
   ConeGeometry,
   Mesh as ThreeMesh,
@@ -87,6 +89,8 @@ export class EarthRunApp {
   private enterFromTilt = 0;
   private enterFromSpin = 0;
   private player: Player | null = null;
+  private companion: Companion | null = null;
+  private outfit: Outfit | undefined;
   private input: GameInput | null = null;
   private race: Race;
   private landmarks: Landmarks;
@@ -171,8 +175,9 @@ export class EarthRunApp {
   }
 
   /** Leave the orbit view and drop onto the planet (called from BEGIN). */
-  startGame(): void {
+  startGame(outfit?: Outfit): void {
     if (this.mode !== "orbit") return;
+    this.outfit = outfit;
     this.introLetters?.startExit(performance.now());
     this.mode = "entering";
     this.enterStartMs = performance.now();
@@ -191,6 +196,10 @@ export class EarthRunApp {
 
   pressJump(): void {
     this.input?.pressJump();
+  }
+
+  pressChop(): void {
+    this.input?.pressChop();
   }
 
   /** Race HUD snapshot for React (poll-friendly). */
@@ -264,8 +273,10 @@ export class EarthRunApp {
         this.tiltGroup.rotation.x = 0;
         this.spinGroup.rotation.y = 0;
         this.tiltGroup.position.y = 0;
-        this.player = buildPlayer(SPAWN.lat, SPAWN.lng);
+        this.player = buildPlayer(SPAWN.lat, SPAWN.lng, this.outfit);
         this.scene.add(this.player.group);
+        this.companion = buildCompanion();
+        this.scene.add(this.companion.group);
         this.input = attachInput(this.canvas);
         cam.fov = PLAY_FOV;
         cam.updateProjectionMatrix();
@@ -275,7 +286,11 @@ export class EarthRunApp {
       const frame = this.input.read();
       // The clock starts the first time you move.
       if (frame.forward !== 0 || frame.turn !== 0) this.race.start(now);
+      if (frame.chop && this.trees.tryChop(this.player.up)) {
+        this.player.chop();
+      }
       this.player.update(dt, frame);
+      this.companion?.update(dt, now, this.player.up, this.player.forward);
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
       const t = this.race.targetTangent(this.player.up, this.guideDir);
@@ -315,6 +330,7 @@ export class EarthRunApp {
       this.introLetters = null;
     }
 
+    this.trees.update(now);
     if (this.params.dayNight) this.applyDayNight();
     this.clouds.update(this.params.cloudSpeed);
     this.planes.update(this.params.cloudSpeed);
@@ -334,6 +350,7 @@ export class EarthRunApp {
     this.detachControls?.();
     this.input?.detach();
     this.player?.dispose();
+    this.companion?.dispose();
     window.removeEventListener("resize", this.resize);
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.planet.dispose();

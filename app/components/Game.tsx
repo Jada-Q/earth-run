@@ -6,8 +6,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EarthRunApp } from "@/lib/three/game-app";
+import { OUTFITS } from "@/lib/three/runner";
 import type { RaceHud } from "@/lib/three/race";
 import ToonBackdrop from "./ToonBackdrop";
+
+const OUTFIT_KEY = "earth-run:outfit";
 
 function fmt(ms: number): string {
   const t = Math.max(0, Math.round(ms));
@@ -22,6 +25,14 @@ export default function Game() {
   const appRef = useRef<EarthRunApp | null>(null);
   const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<RaceHud | null>(null);
+  const [outfitIdx, setOutfitIdx] = useState(0);
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(OUTFIT_KEY));
+    if (Number.isInteger(saved) && saved >= 0 && saved < OUTFITS.length) {
+      setOutfitIdx(saved);
+    }
+  }, []);
 
   // Poll the race HUD at 10Hz while playing.
   useEffect(() => {
@@ -56,7 +67,7 @@ export default function Game() {
 
   const handleBegin = () => {
     setStarted(true);
-    appRef.current?.startGame();
+    appRef.current?.startGame(OUTFITS[outfitIdx]);
   };
 
   return (
@@ -69,6 +80,36 @@ export default function Game() {
       />
       {!started ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-[10%] z-40 flex flex-col items-center gap-5">
+          <div className="pointer-events-auto flex items-center gap-3">
+            {OUTFITS.map((o, i) => (
+              <button
+                key={o.label}
+                type="button"
+                aria-label={`Outfit ${o.label}`}
+                title={o.label}
+                onClick={() => {
+                  setOutfitIdx(i);
+                  try {
+                    localStorage.setItem(OUTFIT_KEY, String(i));
+                  } catch {
+                    // private mode — selection just isn't remembered
+                  }
+                }}
+                className={
+                  "relative h-9 w-9 rounded-full border-2 transition-transform " +
+                  (i === outfitIdx
+                    ? "scale-110 border-[#22302c] shadow-[0_3px_0_rgba(34,48,44,0.5)]"
+                    : "border-[#22302c]/40 opacity-75 hover:opacity-100")
+                }
+                style={{ backgroundColor: o.jacket }}
+              >
+                <span
+                  className="absolute left-1/2 top-0.5 h-2.5 w-2.5 -translate-x-1/2 rounded-sm"
+                  style={{ backgroundColor: o.crest }}
+                />
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={handleBegin}
@@ -78,8 +119,8 @@ export default function Game() {
             Begin
           </button>
           <div className="select-none text-center font-serif text-xs italic text-[#22302c]/70">
-            WASD / arrows to run · space to jump · touch: left = stick,
-            button = jump
+            WASD / arrows to run · space to jump · E to chop trees · touch:
+            left = stick, buttons = jump / chop
           </div>
         </div>
       ) : (
@@ -94,6 +135,17 @@ export default function Game() {
             className="fixed bottom-8 right-8 z-40 h-16 w-16 select-none rounded-full border-2 border-[#22302c] bg-[#efece3]/85 font-mono text-[11px] font-bold uppercase tracking-widest text-[#22302c] shadow-[0_4px_0_rgba(34,44,44,0.45)] active:translate-y-0.5 md:hidden"
           >
             Jump
+          </button>
+          <button
+            type="button"
+            aria-label="Chop"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              appRef.current?.pressChop();
+            }}
+            className="fixed bottom-28 right-8 z-40 h-14 w-14 select-none rounded-full border-2 border-[#22302c] bg-[#efece3]/85 font-mono text-[10px] font-bold uppercase tracking-widest text-[#22302c] shadow-[0_4px_0_rgba(34,44,44,0.45)] active:translate-y-0.5 md:hidden"
+          >
+            Chop
           </button>
           {hud && hud.state !== "finished" ? (
             <div className="pointer-events-none fixed inset-x-0 top-5 z-40 flex justify-center">

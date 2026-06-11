@@ -6,7 +6,7 @@
 
 import { Group, Matrix4, Quaternion, Vector3 } from "three";
 import { latLngToVec3 } from "./geo";
-import { buildRunner, type Runner, type RunnerPose } from "./runner";
+import { buildRunner, type Outfit, type Runner, type RunnerPose } from "./runner";
 import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 
 const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
@@ -23,6 +23,8 @@ export interface PlayerInputFrame {
   turn: number;
   /** True exactly once per jump press. */
   jump: boolean;
+  /** True exactly once per chop press. */
+  chop: boolean;
 }
 
 export interface Player {
@@ -31,13 +33,19 @@ export interface Player {
   readonly up: Vector3;
   /** World facing direction (read-only use). */
   readonly forward: Vector3;
+  /** Play the chop animation (~0.4s). */
+  chop(): void;
   update(dt: number, input: PlayerInputFrame): void;
   dispose(): void;
 }
 
-export function buildPlayer(spawnLat: number, spawnLng: number): Player {
+export function buildPlayer(
+  spawnLat: number,
+  spawnLng: number,
+  outfit?: Outfit,
+): Player {
   const group = new Group();
-  const runner: Runner = buildRunner();
+  const runner: Runner = buildRunner(outfit);
   group.add(runner.group);
   ensureElevationLoaded();
 
@@ -58,6 +66,8 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
   let runPhase = 0;
   let pose: RunnerPose = "idle";
   let pitch = 0; // smoothed terrain pitch (positive = climbing)
+  let chopStartMs = -Infinity;
+  const CHOP_MS = 420;
 
   const axis = new Vector3();
   const step = new Quaternion();
@@ -79,6 +89,9 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
     group,
     up,
     forward: fwd,
+    chop() {
+      chopStartMs = performance.now();
+    },
     update(dt: number, input: PlayerInputFrame) {
       // Turn about local up.
       if (input.turn !== 0) {
@@ -122,9 +135,23 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
         }
       }
 
-      pose =
-        jumpH > 0 ? "jump" : Math.abs(input.forward) > 0.05 ? "run" : "idle";
-      runner.setPose(pose, pose === "idle" ? performance.now() * 0.01 : runPhase);
+      const nowMs = performance.now();
+      const chopping = nowMs - chopStartMs < CHOP_MS;
+      pose = chopping
+        ? "chop"
+        : jumpH > 0
+          ? "jump"
+          : Math.abs(input.forward) > 0.05
+            ? "run"
+            : "idle";
+      runner.setPose(
+        pose,
+        pose === "chop"
+          ? (nowMs - chopStartMs) / CHOP_MS
+          : pose === "idle"
+            ? nowMs * 0.01
+            : runPhase,
+      );
       // Lean the whole body into the slope (about local Z, nose up/down).
       runner.group.rotation.z = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
       apply();

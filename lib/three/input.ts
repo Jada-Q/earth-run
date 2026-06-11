@@ -6,9 +6,10 @@ import type { PlayerInputFrame } from "./player";
 const JOY_RADIUS_PX = 56;
 
 export interface GameInput {
-  /** Read the current frame's input (consumes the jump edge). */
+  /** Read the current frame's input (consumes the jump/chop edges). */
   read(): PlayerInputFrame;
   pressJump(): void;
+  pressChop(): void;
   /** Live joystick state for the HUD (null when not touching). */
   joystick(): { originX: number; originY: number; dx: number; dy: number } | null;
   detach(): void;
@@ -17,6 +18,7 @@ export interface GameInput {
 export function attachInput(target: HTMLElement): GameInput {
   const keys = new Set<string>();
   let jumpQueued = false;
+  let chopQueued = false;
   let joyId: number | null = null;
   let joyOrigin = { x: 0, y: 0 };
   let joyDelta = { x: 0, y: 0 };
@@ -27,6 +29,10 @@ export function attachInput(target: HTMLElement): GameInput {
     if (k === " ") {
       jumpQueued = true;
       e.preventDefault();
+      return;
+    }
+    if (k === "e" || k === "f") {
+      chopQueued = true;
       return;
     }
     keys.add(k);
@@ -89,14 +95,20 @@ export function attachInput(target: HTMLElement): GameInput {
       }
       const jump = jumpQueued;
       jumpQueued = false;
+      const chop = chopQueued;
+      chopQueued = false;
       return {
         forward: Math.max(-1, Math.min(1, forward)),
         turn: Math.max(-1, Math.min(1, turn)),
         jump,
+        chop,
       };
     },
     pressJump() {
       jumpQueued = true;
+    },
+    pressChop() {
+      chopQueued = true;
     },
     joystick() {
       if (joyId === null) return null;

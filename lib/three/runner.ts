@@ -17,10 +17,23 @@ import {
 import { INK } from "./palette";
 import { makeGradientMap } from "./clouds";
 
-export type RunnerPose = "idle" | "run" | "jump";
+export type RunnerPose = "idle" | "run" | "jump" | "chop";
 
 const SCALE = 0.034; // pedestrian-sized — same league as the residents
 const HULL = 1.06;
+
+/** Outfit color scheme — picked on the title screen. */
+export interface Outfit {
+  jacket: string;
+  crest: string;
+}
+
+export const OUTFITS: Array<Outfit & { label: string }> = [
+  { label: "Courier", jacket: "#2e5d66", crest: "#d2693e" },
+  { label: "Forest", jacket: "#3e7d58", crest: "#efe7cf" },
+  { label: "Rose", jacket: "#c4798c", crest: "#3a4d48" },
+  { label: "Ink", jacket: "#3a4d48", crest: "#d9b25e" },
+];
 
 export interface Runner {
   group: Group;
@@ -29,7 +42,7 @@ export interface Runner {
   dispose(): void;
 }
 
-export function buildRunner(): Runner {
+export function buildRunner(outfit: Outfit = OUTFITS[0]): Runner {
   const root = new Group();
   const body = new Group();
   root.add(body);
@@ -43,11 +56,11 @@ export function buildRunner(): Runner {
     mats.push(m);
     return m;
   };
-  const teal = matOf("#2e5d66");
+  const teal = matOf(outfit.jacket);
   const paper = matOf("#f2efe6");
   const skin = matOf("#eecfa4");
   const sage = matOf("#9fbfa8");
-  const crest = matOf("#d2693e"); // mohawk crest — one warm chunk, like the sheet
+  const crest = matOf(outfit.crest);
   const white = new MeshBasicMaterial({ color: "#fbfaf5" });
   const inkSolid = new MeshBasicMaterial({ color: INK });
   const inkHull = new MeshBasicMaterial({ color: INK, side: BackSide });
@@ -158,6 +171,15 @@ export function buildRunner(): Runner {
         // Big-head bounce sells the chunky run.
         body.position.y = Math.abs(Math.cos(phase)) * 0.07;
         body.rotation.z = -0.12;
+      } else if (pose === "chop") {
+        // Both arms swing down hard, body dips into the blow.
+        const sw = Math.sin(Math.min(phase, 1) * Math.PI);
+        armL.rotation.z = -2.2 + sw * 1.6;
+        armR.rotation.z = -2.2 + sw * 1.6;
+        legL.rotation.z = 0.15;
+        legR.rotation.z = -0.15;
+        body.position.y = -sw * 0.04;
+        body.rotation.z = -0.22 * sw;
       } else if (pose === "jump") {
         legL.rotation.z = 0.7;
         legR.rotation.z = -0.5;
