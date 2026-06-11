@@ -19,7 +19,7 @@ import { makeGradientMap } from "./clouds";
 
 export type RunnerPose = "idle" | "run" | "jump";
 
-const SCALE = 0.05;
+const SCALE = 0.034; // pedestrian-sized — same league as the residents
 const HULL = 1.06;
 
 export interface Runner {

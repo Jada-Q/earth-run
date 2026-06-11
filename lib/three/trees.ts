@@ -21,7 +21,9 @@ import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 import type { Landmarks } from "./landmarks";
 
 const WILD_TREES = 560;
-const CITY_TREES = 10; // per city, scattered around the outskirts
+// Few and FAR from the landmark — famous monuments sit in plazas, not
+// forests. The grove is scenery on the way in, not crowding the tower.
+const CITY_TREES = 4;
 const BASE = 0.016; // trunk-height unit; total tree ≈ 2x this
 
 function isVegetated(mask: LandMask, lat: number, lng: number): boolean {
@@ -129,7 +131,19 @@ export function buildTrees(landmarks: Landmarks): Trees {
       i++;
     };
 
-    // Wild forests via rejection sampling on the vegetation mask.
+    // Wild forests via rejection sampling on the vegetation mask. Cities
+    // get a 1.5° exclusion zone — monuments sit in plazas, not woods.
+    const nearCity = (lat: number, lng: number): boolean => {
+      for (const a of landmarks.anchors) {
+        const clat = (Math.asin(a.dir.y) * 180) / Math.PI;
+        const clng = (Math.atan2(-a.dir.z, a.dir.x) * 180) / Math.PI;
+        let dLng = Math.abs(lng - clng);
+        if (dLng > 180) dLng = 360 - dLng;
+        const d = Math.hypot(lat - clat, dLng * Math.cos((clat * Math.PI) / 180));
+        if (d < 1.5) return true;
+      }
+      return false;
+    };
     let attempts = 0;
     let placedWild = 0;
     while (placedWild < WILD_TREES && attempts < WILD_TREES * 30) {
@@ -137,6 +151,7 @@ export function buildTrees(landmarks: Landmarks): Trees {
       const lat = -55 + rng() * 125; // -55..70
       const lng = -180 + rng() * 360;
       if (!mask || !isVegetated(mask, lat, lng)) continue;
+      if (nearCity(lat, lng)) continue;
       place(lat, lng);
       placedWild++;
     }
@@ -147,7 +162,7 @@ export function buildTrees(landmarks: Landmarks): Trees {
       const lng = (Math.atan2(-a.dir.z, a.dir.x) * 180) / Math.PI;
       for (let k = 0; k < CITY_TREES; k++) {
         const ang = rng() * Math.PI * 2;
-        const r = 2.2 + rng() * 2.4; // degrees from the city
+        const r = 4.5 + rng() * 2.5; // well outside the plaza
         place(lat + Math.sin(ang) * r, lng + (Math.cos(ang) * r) / Math.max(0.3, Math.cos((lat * Math.PI) / 180)));
       }
     }

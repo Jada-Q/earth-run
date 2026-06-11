@@ -51,8 +51,8 @@ const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
 const ENTER_MS = 900;
 const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
-const CAM_DIST = 0.3; // behind the runner
-const CAM_HEIGHT = 0.1; // low — street-level feel, horizon high in frame
+const CAM_DIST = 0.21; // behind the (now pedestrian-sized) runner
+const CAM_HEIGHT = 0.065; // low — street-level feel, horizon high in frame
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
 type Mode = "orbit" | "entering" | "play";
