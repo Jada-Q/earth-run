@@ -26,6 +26,7 @@ export default function Game() {
   const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<RaceHud | null>(null);
   const [outfitIdx, setOutfitIdx] = useState(0);
+  const [landmark, setLandmark] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = Number(localStorage.getItem(OUTFIT_KEY));
@@ -40,6 +41,7 @@ export default function Game() {
     const id = setInterval(() => {
       const h = appRef.current?.raceHud();
       if (h) setHud(h);
+      setLandmark(appRef.current?.nearbyLandmark() ?? null);
     }, 100);
     return () => clearInterval(id);
   }, [started]);
@@ -164,6 +166,13 @@ export default function Game() {
                     best {fmt(hud.bestMs)}
                   </span>
                 ) : null}
+              </div>
+            </div>
+          ) : null}
+          {landmark ? (
+            <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center md:bottom-28">
+              <div className="select-none rounded-md border-2 border-[#22302c] bg-[#efece3]/90 px-4 py-1.5 text-center font-serif text-sm italic text-[#22302c] shadow-[3px_3px_0_rgba(34,48,44,0.35)]">
+                {landmark}
               </div>
             </div>
           ) : null}

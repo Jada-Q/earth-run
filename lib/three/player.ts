@@ -4,16 +4,30 @@
 // frame about its own axes — turning about local Y, advancing about local
 // -Z (= up × forward). Jumping is a 1-D parabola on the radial axis.
 
-import { Group, Matrix4, Quaternion, Vector3 } from "three";
-import { latLngToVec3 } from "./geo";
+import {
+  BackSide,
+  BoxGeometry,
+  Group,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  MeshToonMaterial,
+  Quaternion,
+  Vector3,
+} from "three";
+import { latLngToVec3, vec3ToLatLng } from "./geo";
 import { buildRunner, type Outfit, type Runner, type RunnerPose } from "./runner";
 import { ensureElevationLoaded, groundHeightAt } from "./elevation";
+import { loadLandMask, isSea, type LandMask } from "./ships";
+import { INK } from "./palette";
+import { makeGradientMap } from "./clouds";
 
 const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
 const BACK_SPEED = 0.09;
+const SEA_SPEED_MUL = 1.15; // the boat is a little faster than legs
 const TURN_SPEED = 2.6; // rad/s
-const JUMP_VELOCITY = 0.32; // world units/s, radial
-const GRAVITY = 1.1;
+const JUMP_VELOCITY = 0.42; // world units/s, radial — jumps are plane rides
+const GRAVITY = 0.75; // floaty: you're airborne on wings, not legs
 const RUN_CYCLE_FREQ = 14; // limb swings per surface-radian, ~cartoon cadence
 
 export interface PlayerInputFrame {
@@ -39,6 +53,46 @@ export interface Player {
   dispose(): void;
 }
 
+/** Tiny vehicle builder shared by the boat and the plane. */
+function vehicleParts() {
+  const mats: MeshToonMaterial[] = [];
+  const matOf = (hex: string) => {
+    const m = new MeshToonMaterial({
+      color: hex,
+      gradientMap: makeGradientMap(3, 0.82),
+    });
+    mats.push(m);
+    return m;
+  };
+  const inkHull = new MeshBasicMaterial({ color: INK, side: BackSide });
+  const geos: BoxGeometry[] = [];
+  const addBox = (
+    parent: Group,
+    mat: MeshToonMaterial,
+    w: number, h: number, d: number,
+    x: number, y: number, z: number,
+  ) => {
+    const geo = new BoxGeometry(w, h, d);
+    geos.push(geo);
+    const m = new Mesh(geo, mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    const hull = new Mesh(geo, inkHull);
+    hull.position.set(x, y, z);
+    hull.scale.setScalar(1.07);
+    parent.add(hull);
+  };
+  const dispose = () => {
+    for (const g of geos) g.dispose();
+    for (const m of mats) {
+      m.gradientMap?.dispose();
+      m.dispose();
+    }
+    inkHull.dispose();
+  };
+  return { matOf, addBox, dispose };
+}
+
 export function buildPlayer(
   spawnLat: number,
   spawnLng: number,
@@ -48,6 +102,32 @@ export function buildPlayer(
   const runner: Runner = buildRunner(outfit);
   group.add(runner.group);
   ensureElevationLoaded();
+
+  let mask: LandMask | null = null;
+  void loadLandMask().then((m) => {
+    mask = m;
+  });
+
+  // Boat — appears when you run onto open water. +X = bow.
+  const boatKit = vehicleParts();
+  const boat = new Group();
+  boatKit.addBox(boat, boatKit.matOf("#f2efe6"), 1.1, 0.3, 0.6, 0, 0.15, 0); // hull
+  boatKit.addBox(boat, boatKit.matOf("#2e5d66"), 0.25, 0.22, 0.45, -0.35, 0.4, 0); // stern bench
+  boatKit.addBox(boat, boatKit.matOf("#d2693e"), 0.3, 0.1, 0.1, 0.5, 0.34, 0); // bow trim
+  boat.scale.setScalar(0.034);
+  boat.visible = false;
+  group.add(boat);
+
+  // Plane — appears mid-jump. +X = nose.
+  const planeKit = vehicleParts();
+  const plane = new Group();
+  planeKit.addBox(plane, planeKit.matOf("#f2efe6"), 1.2, 0.26, 0.3, 0, 0.1, 0); // fuselage
+  planeKit.addBox(plane, planeKit.matOf("#d2693e"), 0.36, 0.07, 1.5, 0.08, 0.12, 0); // wing
+  planeKit.addBox(plane, planeKit.matOf("#f2efe6"), 0.22, 0.06, 0.5, -0.52, 0.16, 0); // tail wing
+  planeKit.addBox(plane, planeKit.matOf("#d2693e"), 0.18, 0.3, 0.07, -0.55, 0.28, 0); // fin
+  plane.scale.setScalar(0.034);
+  plane.visible = false;
+  group.add(plane);
 
   // --- initial frame at the spawn point, facing east -----------------------
   const up = latLngToVec3(spawnLat, spawnLng, new Vector3());
@@ -99,6 +179,13 @@ export function buildPlayer(
         step.setFromAxisAngle(axis, input.turn * TURN_SPEED * dt);
         q.premultiply(step);
       }
+      // Sea check: on open water you sail; jumping puts you on wings.
+      let atSea = false;
+      if (mask) {
+        const ll = vec3ToLatLng(up);
+        atSea = isSea(mask, ll.lat, ll.lng);
+      }
+
       // Terrain pitch under the runner: sample ground ahead vs behind.
       // Drives the climb/descend body lean AND the speed (slower uphill,
       // faster downhill) — the feel of actually working up a mountain.
@@ -113,7 +200,9 @@ export function buildPlayer(
       pitch += (targetPitch - pitch) * Math.min(1, dt * 10);
 
       // Advance along the great circle (rotate about local -Z = up×forward).
-      const slopeFactor = Math.min(1.35, Math.max(0.55, 1 - slope * 2.0));
+      const slopeFactor = atSea
+        ? SEA_SPEED_MUL
+        : Math.min(1.35, Math.max(0.55, 1 - slope * 2.0));
       const speed =
         (input.forward > 0
           ? input.forward * RUN_SPEED
@@ -137,13 +226,17 @@ export function buildPlayer(
 
       const nowMs = performance.now();
       const chopping = nowMs - chopStartMs < CHOP_MS;
+      const flying = jumpH > 0;
+      const sailing = !flying && atSea;
       pose = chopping
         ? "chop"
-        : jumpH > 0
+        : flying
           ? "jump"
-          : Math.abs(input.forward) > 0.05
-            ? "run"
-            : "idle";
+          : sailing
+            ? "idle" // standing in the boat
+            : Math.abs(input.forward) > 0.05
+              ? "run"
+              : "idle";
       runner.setPose(
         pose,
         pose === "chop"
@@ -152,12 +245,28 @@ export function buildPlayer(
             ? nowMs * 0.01
             : runPhase,
       );
+
+      // Vehicles: plane mid-air, boat on water, legs on land.
+      plane.visible = flying;
+      boat.visible = sailing;
+      if (sailing) {
+        boat.rotation.x = Math.sin(nowMs * 0.003) * 0.06; // gentle roll
+        runner.group.position.y = 0.011; // standing on the deck
+      } else if (flying) {
+        runner.group.position.y = 0.006; // seated on the fuselage
+        plane.rotation.z = Math.max(-0.4, Math.min(0.4, jumpV * 1.2)); // nose follows the arc
+      } else {
+        runner.group.position.y = 0;
+      }
+
       // Lean the whole body into the slope (about local Z, nose up/down).
       runner.group.rotation.z = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
       apply();
     },
     dispose() {
       runner.dispose();
+      boatKit.dispose();
+      planeKit.dispose();
     },
   };
 }

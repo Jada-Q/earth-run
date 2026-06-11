@@ -24,18 +24,18 @@ import { makeGradientMap } from "./clouds";
 import { latLngToVec3 } from "./geo";
 
 // Same coords as the race route (plus the start city itself).
-const CITIES: Array<{ key: string; lat: number; lng: number }> = [
-  { key: "tokyo", lat: 35.7, lng: 139.7 },
-  { key: "la", lat: 34.1, lng: -118.2 },
-  { key: "chicago", lat: 41.9, lng: -87.6 },
-  { key: "nyc", lat: 40.7, lng: -74.0 },
-  { key: "london", lat: 51.5, lng: -0.1 },
-  { key: "paris", lat: 48.9, lng: 2.3 },
-  { key: "rome", lat: 41.9, lng: 12.5 },
-  { key: "istanbul", lat: 41.0, lng: 28.9 },
-  { key: "dubai", lat: 25.2, lng: 55.3 },
-  { key: "delhi", lat: 28.6, lng: 77.2 },
-  { key: "shanghai", lat: 31.2, lng: 121.5 },
+const CITIES: Array<{ key: string; name: string; lat: number; lng: number }> = [
+  { key: "tokyo", name: "Tokyo Tower · 东京塔", lat: 35.7, lng: 139.7 },
+  { key: "la", name: "Hollywood Sign · 好莱坞标志", lat: 34.1, lng: -118.2 },
+  { key: "chicago", name: "Willis Tower · 威利斯大厦", lat: 41.9, lng: -87.6 },
+  { key: "nyc", name: "Statue of Liberty · 自由女神像", lat: 40.7, lng: -74.0 },
+  { key: "london", name: "Big Ben · 大本钟", lat: 51.5, lng: -0.1 },
+  { key: "paris", name: "Eiffel Tower · 埃菲尔铁塔", lat: 48.9, lng: 2.3 },
+  { key: "rome", name: "Colosseum · 罗马斗兽场", lat: 41.9, lng: 12.5 },
+  { key: "istanbul", name: "Hagia Sophia · 圣索菲亚大教堂", lat: 41.0, lng: 28.9 },
+  { key: "dubai", name: "Burj Khalifa · 哈利法塔", lat: 25.2, lng: 55.3 },
+  { key: "delhi", name: "India Gate · 印度门", lat: 28.6, lng: 77.2 },
+  { key: "shanghai", name: "Oriental Pearl · 东方明珠", lat: 31.2, lng: 121.5 },
 ];
 
 const PAPER = "#e9e5d8";
@@ -59,7 +59,13 @@ const BEN_LIMESTONE = "#d6c79e";
 export interface Landmarks {
   group: Group;
   /** City anchor frames for the NPC module: position + tangent basis. */
-  anchors: Array<{ key: string; dir: Vector3; east: Vector3; north: Vector3 }>;
+  anchors: Array<{
+    key: string;
+    name: string;
+    dir: Vector3;
+    east: Vector3;
+    north: Vector3;
+  }>;
   dispose(): void;
 }
 
@@ -301,7 +307,7 @@ export function buildLandmarks(): Landmarks {
     const dir = latLngToVec3(c.lat, c.lng, new Vector3());
     const east = new Vector3().copy(pole).cross(dir).normalize();
     const north = new Vector3().copy(dir).cross(east).normalize();
-    anchors.push({ key: c.key, dir, east, north });
+    anchors.push({ key: c.key, name: c.name, dir, east, north });
 
     const holder = new Group();
     // Close to the gate (a far offset hides the base behind the horizon

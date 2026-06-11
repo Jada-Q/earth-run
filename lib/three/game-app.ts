@@ -207,6 +207,16 @@ export class EarthRunApp {
     return this.race.hud(performance.now());
   }
 
+  /** Landmark plaque: name of the monument you're standing near (≤3°). */
+  nearbyLandmark(): string | null {
+    if (!this.player) return null;
+    const NEAR = Math.cos((3 * Math.PI) / 180);
+    for (const a of this.landmarks.anchors) {
+      if (this.player.up.dot(a.dir) > NEAR) return a.name;
+    }
+    return null;
+  }
+
   /** Reset the lap and put the runner back on the start line. */
   restartRace(): void {
     if (this.mode !== "play" || !this.player) return;
