@@ -9,7 +9,7 @@
 export const MINT_BG = "#66c4bd";
 export const PAPER = "#d8d3c5";
 export const VEGETATION = "#3e7d58";
-export const SEA = "#58b5ab";
+export const SEA = "#5fbfb4";
 export const INK = "#22302c";
 export const ACCENT = "#e8ab3c"; // intro BEGIN button ONLY
 export const CLOUD = "#f4f1e8";
@@ -45,14 +45,17 @@ export interface ToonParams {
 export function defaultToonParams(): ToonParams {
   return {
     steps: 3,
-    shadeMul: 0.8,
+    shadeMul: 0.88,
     inkWidth: 0.018,
     inkStrength: 0.85,
     outlineWidth: 0.012,
     rotationSpeed: 0.1,
     cloudSpeed: 1.0,
     lightAzimuth: -35,
-    lightElevation: 28,
-    dayNight: true,
+    lightElevation: 32,
+    // Off by default: players in their local evening were getting a planet
+    // in night shadow ("颜色太暗"). The reference look is bright daytime;
+    // the ?debug=1 pane can re-enable the clock.
+    dayNight: false,
   };
 }
