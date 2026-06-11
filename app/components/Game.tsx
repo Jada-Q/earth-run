@@ -25,6 +25,8 @@ export default function Game() {
   const appRef = useRef<EarthRunApp | null>(null);
   const paneDisposeRef = useRef<(() => void) | null>(null);
   const [paneOn, setPaneOn] = useState(false);
+  const musicRef = useRef<{ setMuted(m: boolean): void; dispose(): void } | null>(null);
+  const [muted, setMuted] = useState(false);
   const [started, setStarted] = useState(false);
   const [hud, setHud] = useState<RaceHud | null>(null);
   const [outfitIdx, setOutfitIdx] = useState(0);
@@ -107,6 +109,38 @@ export default function Game() {
   const handleBegin = () => {
     setStarted(true);
     appRef.current?.startGame(OUTFITS[outfitIdx]);
+    // Music starts on the BEGIN gesture (browsers require user input
+    // before audio). Procedural pentatonic loop — see lib/three/music.ts.
+    if (!musicRef.current) {
+      void import("@/lib/three/music").then(({ startMusic }) => {
+        if (!musicRef.current) {
+          musicRef.current = startMusic();
+          const savedMute = localStorage.getItem("earth-run:muted") === "1";
+          if (savedMute) {
+            musicRef.current.setMuted(true);
+            setMuted(true);
+          }
+        }
+      });
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      musicRef.current?.dispose();
+      musicRef.current = null;
+    };
+  }, []);
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    musicRef.current?.setMuted(next);
+    try {
+      localStorage.setItem("earth-run:muted", next ? "1" : "0");
+    } catch {
+      // private mode
+    }
   };
 
   const togglePane = () => {
@@ -134,6 +168,16 @@ export default function Game() {
         className="fixed inset-0 h-full w-full touch-none"
         aria-label="Earth Run"
       />
+      {started ? (
+        <button
+          type="button"
+          aria-label={muted ? "Unmute music" : "Mute music"}
+          onClick={toggleMute}
+          className="fixed bottom-4 left-24 z-50 rounded-full border-2 border-[#22302c] bg-[#efece3]/80 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-[#22302c] shadow-[0_3px_0_rgba(34,48,44,0.4)]"
+        >
+          {muted ? "♪ off" : "♪ on"}
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label="Tune look"
