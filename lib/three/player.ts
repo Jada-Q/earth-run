@@ -25,9 +25,13 @@ import { makeGradientMap } from "./clouds";
 const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
 const BACK_SPEED = 0.09;
 const SEA_SPEED_MUL = 1.15; // the boat is a little faster than legs
+const FLY_SPEED_MUL = 1.7; // wings beat legs
 const TURN_SPEED = 2.6; // rad/s
-const JUMP_VELOCITY = 0.42; // world units/s, radial — jumps are plane rides
-const GRAVITY = 0.75; // floaty: you're airborne on wings, not legs
+const JUMP_VELOCITY = 0.32; // tap = a hop
+const CLIMB_SPEED = 0.16; // hold = the plane climbs at this rate
+const ALT_CAP = 0.075; // cruise ceiling above the terrain
+const GLIDE_GRAVITY = 0.45; // released/out of fuel → gentle glide down
+const FUEL_MAX = 3.5; // seconds of climb; refills on touchdown
 const RUN_CYCLE_FREQ = 14; // limb swings per surface-radian, ~cartoon cadence
 
 export interface PlayerInputFrame {
@@ -37,6 +41,8 @@ export interface PlayerInputFrame {
   turn: number;
   /** True exactly once per jump press. */
   jump: boolean;
+  /** True while the jump control is held — sustains flight. */
+  jumpHeld: boolean;
   /** True exactly once per chop press. */
   chop: boolean;
 }
@@ -49,7 +55,15 @@ export interface Player {
   readonly forward: Vector3;
   /** Play the chop animation (~0.4s). */
   chop(): void;
-  update(dt: number, input: PlayerInputFrame): void;
+  /** Flight fuel 0..1 for the HUD. */
+  fuelRatio(): number;
+  /** True while airborne on the plane. */
+  isFlying(): boolean;
+  update(
+    dt: number,
+    input: PlayerInputFrame,
+    colliders?: ReadonlyArray<{ dir: Vector3; minDot: number }>,
+  ): void;
   dispose(): void;
 }
 
@@ -143,6 +157,7 @@ export function buildPlayer(
 
   let jumpH = 0;
   let jumpV = 0;
+  let fuel = FUEL_MAX;
   let runPhase = 0;
   let pose: RunnerPose = "idle";
   let pitch = 0; // smoothed terrain pitch (positive = climbing)
@@ -172,7 +187,17 @@ export function buildPlayer(
     chop() {
       chopStartMs = performance.now();
     },
-    update(dt: number, input: PlayerInputFrame) {
+    fuelRatio() {
+      return fuel / FUEL_MAX;
+    },
+    isFlying() {
+      return jumpH > 0;
+    },
+    update(
+      dt: number,
+      input: PlayerInputFrame,
+      colliders?: ReadonlyArray<{ dir: Vector3; minDot: number }>,
+    ) {
       // Turn about local up.
       if (input.turn !== 0) {
         axis.set(0, 1, 0).applyQuaternion(q);
@@ -208,9 +233,12 @@ export function buildPlayer(
       pitch += (targetPitch - pitch) * Math.min(1, dt * 10);
 
       // Advance along the great circle (rotate about local -Z = up×forward).
-      const slopeFactor = atSea
-        ? SEA_SPEED_MUL
-        : Math.min(1.35, Math.max(0.55, 1 - slope * 2.0));
+      const slopeFactor =
+        jumpH > 0
+          ? FLY_SPEED_MUL // airborne: terrain doesn't slow wings
+          : atSea
+            ? SEA_SPEED_MUL
+            : Math.min(1.35, Math.max(0.55, 1 - slope * 2.0));
       const speed =
         (input.forward > 0
           ? input.forward * RUN_SPEED
@@ -221,14 +249,42 @@ export function buildPlayer(
         q.premultiply(step);
         runPhase += Math.abs(speed) * dt * RUN_CYCLE_FREQ;
       }
-      // Jump.
+      // Jump & flight. Tap = hop; HOLD = the plane climbs while fuel lasts
+      // (3.5s, refills on touchdown); release or run dry = gentle glide.
       if (input.jump && jumpH === 0) jumpV = JUMP_VELOCITY;
       if (jumpV !== 0 || jumpH > 0) {
+        const thrusting = input.jumpHeld && fuel > 0 && jumpH > 0;
+        if (thrusting) {
+          fuel = Math.max(0, fuel - dt);
+          jumpV += (CLIMB_SPEED - jumpV) * Math.min(1, dt * 4);
+          if (jumpH >= ALT_CAP) jumpV = Math.min(jumpV, 0);
+        } else {
+          jumpV -= GLIDE_GRAVITY * dt;
+        }
         jumpH += jumpV * dt;
-        jumpV -= GRAVITY * dt;
         if (jumpH <= 0) {
           jumpH = 0;
           jumpV = 0;
+          fuel = FUEL_MAX;
+        }
+      }
+
+      // Collision: solid obstacles push the runner back out along the
+      // great circle (skip while airborne — you fly OVER buildings).
+      if (colliders && jumpH === 0) {
+        up.set(0, 1, 0).applyQuaternion(q);
+        for (const c of colliders) {
+          const d = up.dot(c.dir);
+          if (d > c.minDot) {
+            const theta = Math.acos(Math.min(1, d));
+            const minTheta = Math.acos(Math.min(1, c.minDot));
+            axis.copy(up).cross(c.dir);
+            if (axis.lengthSq() < 1e-10) continue; // dead center — let it be
+            axis.normalize();
+            step.setFromAxisAngle(axis, minTheta - theta);
+            q.premultiply(step);
+            up.set(0, 1, 0).applyQuaternion(q);
+          }
         }
       }
 

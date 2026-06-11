@@ -33,6 +33,8 @@ import { buildNpcs, type Npcs } from "./npcs";
 import { buildStreetProps, type StreetProps } from "./streetprops";
 import { buildTrees, type Trees } from "./trees";
 import { buildCompanion, type Companion } from "./companion";
+import { buildSigns, type Signs } from "./signs";
+import { regionAt, type GeoKind } from "./regions-geo";
 import type { Outfit } from "./runner";
 import {
   ConeGeometry,
@@ -97,6 +99,7 @@ export class EarthRunApp {
   private npcs: Npcs;
   private streetProps: StreetProps;
   private trees: Trees;
+  private signs: Signs;
   private introLetters: IntroLetters | null = null;
   private guideArrow: ThreeMesh;
   private guideDir = new Vector3();
@@ -151,6 +154,8 @@ export class EarthRunApp {
     this.spinGroup.add(this.streetProps.group);
     this.trees = buildTrees(this.landmarks);
     this.spinGroup.add(this.trees.group);
+    this.signs = buildSigns(this.landmarks);
+    this.spinGroup.add(this.signs.group);
     this.guideArrow = new ThreeMesh(
       new ConeGeometry(0.007, 0.02, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
@@ -202,9 +207,28 @@ export class EarthRunApp {
     this.input?.pressChop();
   }
 
+  setJumpHeld(held: boolean): void {
+    this.input?.setJumpHeld(held);
+  }
+
+  /** Flight fuel 0..1 (1 when grounded/refilled). */
+  flightFuel(): number {
+    return this.player?.fuelRatio() ?? 1;
+  }
+
+  isFlying(): boolean {
+    return this.player?.isFlying() ?? false;
+  }
+
   /** Race HUD snapshot for React (poll-friendly). */
   raceHud(): RaceHud {
     return this.race.hud(performance.now());
+  }
+
+  /** Geography layer: country/range/ocean under the runner's feet. */
+  currentRegion(): { name: string; kind: GeoKind } | null {
+    if (!this.player) return null;
+    return regionAt(this.player.up);
   }
 
   /** Landmark plaque: name of the monument you're standing near (≤3°). */
@@ -299,7 +323,10 @@ export class EarthRunApp {
       if (frame.chop && this.trees.tryChop(this.player.up)) {
         this.player.chop();
       }
-      this.player.update(dt, frame);
+      this.player.update(dt, frame, [
+        ...this.landmarks.colliders,
+        ...this.trees.colliders(),
+      ]);
       this.companion?.update(dt, now, this.player.up, this.player.forward);
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
@@ -375,6 +402,7 @@ export class EarthRunApp {
     this.npcs.dispose();
     this.streetProps.dispose();
     this.trees.dispose();
+    this.signs.dispose();
     this.introLetters?.dispose();
     this.guideArrow.geometry.dispose();
     (this.guideArrow.material as MeshBasicMaterial).dispose();

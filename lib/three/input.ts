@@ -9,6 +9,8 @@ export interface GameInput {
   /** Read the current frame's input (consumes the jump/chop edges). */
   read(): PlayerInputFrame;
   pressJump(): void;
+  /** Touch jump button held state (keyboards report space directly). */
+  setJumpHeld(held: boolean): void;
   pressChop(): void;
   /** Live joystick state for the HUD (null when not touching). */
   joystick(): { originX: number; originY: number; dx: number; dy: number } | null;
@@ -19,6 +21,7 @@ export function attachInput(target: HTMLElement): GameInput {
   const keys = new Set<string>();
   let jumpQueued = false;
   let chopQueued = false;
+  let touchJumpHeld = false;
   let joyId: number | null = null;
   let joyOrigin = { x: 0, y: 0 };
   let joyDelta = { x: 0, y: 0 };
@@ -28,6 +31,7 @@ export function attachInput(target: HTMLElement): GameInput {
     const k = e.key.toLowerCase();
     if (k === " ") {
       jumpQueued = true;
+      keys.add(" "); // held state sustains flight
       e.preventDefault();
       return;
     }
@@ -101,11 +105,15 @@ export function attachInput(target: HTMLElement): GameInput {
         forward: Math.max(-1, Math.min(1, forward)),
         turn: Math.max(-1, Math.min(1, turn)),
         jump,
+        jumpHeld: keys.has(" ") || touchJumpHeld,
         chop,
       };
     },
     pressJump() {
       jumpQueued = true;
+    },
+    setJumpHeld(held: boolean) {
+      touchJumpHeld = held;
     },
     pressChop() {
       chopQueued = true;

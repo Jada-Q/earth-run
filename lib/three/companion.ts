@@ -89,6 +89,13 @@ export function buildCompanion(): Companion {
   tail.rotation.z = -0.6;
   body.add(tail);
 
+  // The dog's own little boat for sea crossings.
+  const boat = new Group();
+  addBox(boat, matOf("#f2efe6"), 1.0, 0.28, 0.6, 0, -0.12, 0);
+  addBox(boat, matOf("#2e5d66"), 0.22, 0.1, 0.45, -0.3, 0.06, 0);
+  boat.visible = false;
+  group.add(boat);
+
   group.scale.setScalar(SCALE);
 
   const dir = new Vector3(1, 0, 0); // current position on the sphere
@@ -128,10 +135,18 @@ export function buildCompanion(): Companion {
         .copy(dir)
         .multiplyScalar(1 + groundHeightAt(dir) + bounce);
       tail.rotation.x = Math.sin(nowMs * 0.014) * 0.6;
-      // Dogs don't walk on water — hide at sea, catch up on the next shore.
+      // Over water the dog gets its own little boat (waterline test, same
+      // tight threshold as the player's).
       if (mask) {
         const ll = vec3ToLatLng(dir);
-        group.visible = !isSea(mask, ll.lat, ll.lng);
+        const u = (ll.lng + 180) / 360;
+        const v = 1 - (ll.lat + 90) / 180;
+        const px = Math.min(mask.w - 1, Math.max(0, Math.round(u * mask.w)));
+        const py = Math.min(mask.h - 1, Math.max(0, Math.round(v * mask.h)));
+        const sea = mask.data[(py * mask.w + px) * 4] < 126;
+        boat.visible = sea;
+        boat.rotation.x = sea ? Math.sin(nowMs * 0.0032) * 0.07 : 0;
+        body.position.y = sea ? 0.16 : 0;
       }
     },
     dispose() {

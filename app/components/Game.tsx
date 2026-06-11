@@ -28,6 +28,11 @@ export default function Game() {
   const [outfitIdx, setOutfitIdx] = useState(0);
   const [landmark, setLandmark] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [fuel, setFuel] = useState(1);
+  const [flying, setFlying] = useState(false);
+  const [region, setRegion] = useState<string | null>(null);
+  const lastRegionRef = useRef<string | null>(null);
+  const regionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLandmarkRef = useRef<string | null>(null);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,6 +59,24 @@ export default function Game() {
         bannerTimerRef.current = setTimeout(() => setBanner(null), 3500);
       }
       if (!lm) lastLandmarkRef.current = null;
+      setFuel(appRef.current?.flightFuel() ?? 1);
+      setFlying(appRef.current?.isFlying() ?? false);
+      // Geography ribbon: announce entering a new country/range/ocean.
+      const reg = appRef.current?.currentRegion() ?? null;
+      const regName = reg?.name ?? null;
+      if (regName && regName !== lastRegionRef.current) {
+        lastRegionRef.current = regName;
+        setRegion(
+          (reg!.kind === "ocean"
+            ? "Now crossing — "
+            : reg!.kind === "country"
+              ? "Welcome to — "
+              : "Now traversing — ") + regName,
+        );
+        if (regionTimerRef.current) clearTimeout(regionTimerRef.current);
+        regionTimerRef.current = setTimeout(() => setRegion(null), 3000);
+      }
+      if (!regName) lastRegionRef.current = null;
     }, 100);
     return () => clearInterval(id);
   }, [started]);
@@ -141,15 +164,29 @@ export default function Game() {
         <>
           <button
             type="button"
-            aria-label="Jump"
+            aria-label="Jump / fly"
             onPointerDown={(e) => {
               e.preventDefault();
               appRef.current?.pressJump();
+              appRef.current?.setJumpHeld(true);
             }}
+            onPointerUp={() => appRef.current?.setJumpHeld(false)}
+            onPointerLeave={() => appRef.current?.setJumpHeld(false)}
+            onPointerCancel={() => appRef.current?.setJumpHeld(false)}
             className="fixed bottom-8 right-8 z-40 h-16 w-16 select-none rounded-full border-2 border-[#22302c] bg-[#efece3]/85 font-mono text-[11px] font-bold uppercase tracking-widest text-[#22302c] shadow-[0_4px_0_rgba(34,44,44,0.45)] active:translate-y-0.5 md:hidden"
           >
-            Jump
+            Fly
           </button>
+          {flying || fuel < 1 ? (
+            <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center">
+              <div className="h-2 w-40 overflow-hidden rounded-full border-2 border-[#22302c] bg-[#efece3]/80">
+                <div
+                  className="h-full bg-[#2e5d66] transition-[width] duration-100"
+                  style={{ width: `${Math.round(fuel * 100)}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
           <button
             type="button"
             aria-label="Chop"
@@ -178,6 +215,13 @@ export default function Game() {
                     best {fmt(hud.bestMs)}
                   </span>
                 ) : null}
+              </div>
+            </div>
+          ) : null}
+          {region && !banner ? (
+            <div className="pointer-events-none fixed inset-x-0 top-16 z-30 flex justify-center px-4">
+              <div className="select-none rounded-full border-2 border-[#22302c] bg-[#22302c]/85 px-5 py-1.5 text-center font-serif text-sm italic text-[#efece3] shadow-[3px_3px_0_rgba(34,48,44,0.3)]">
+                {region}
               </div>
             </div>
           ) : null}

@@ -37,6 +37,8 @@ function isVegetated(mask: LandMask, lat: number, lng: number): boolean {
 
 export interface Trees {
   group: Group;
+  /** Solid trunks of trees still standing (chopped trees clear the way). */
+  colliders(): Array<{ dir: Vector3; minDot: number }>;
   /** Chop the nearest standing tree within reach. True if one fell. */
   tryChop(up: Vector3): boolean;
   /** Advance falling-tree animations. */
@@ -210,13 +212,27 @@ export function buildTrees(landmarks: Landmarks): Trees {
     }
   })();
 
+  const TREE_R = Math.cos(0.005);
+  let colliderCache: Array<{ dir: Vector3; minDot: number }> | null = null;
+
   return {
     group,
+    colliders() {
+      // Cached; invalidated when a tree falls (chopping clears the path).
+      if (!colliderCache) {
+        colliderCache = [];
+        for (const rec of recs) {
+          if (rec.alive) colliderCache.push({ dir: rec.dir, minDot: TREE_R });
+        }
+      }
+      return colliderCache;
+    },
     tryChop(up: Vector3): boolean {
       for (let k = 0; k < recs.length; k++) {
         const rec = recs[k];
         if (rec.alive && rec.dir.dot(up) > CHOP_REACH_COS) {
           rec.alive = false;
+          colliderCache = null;
           falls.push({ idx: k, start: performance.now() });
           return true;
         }

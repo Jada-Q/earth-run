@@ -56,6 +56,12 @@ const BURJ_SILVER = "#c4d0d2";
 const WILLIS_BLACK = "#2b3a3d";
 const BEN_LIMESTONE = "#d6c79e";
 
+export interface Collider {
+  dir: Vector3;
+  /** cos of the angular keep-out radius — collide when up·dir > minDot. */
+  minDot: number;
+}
+
 export interface Landmarks {
   group: Group;
   /** City anchor frames for the NPC module: position + tangent basis. */
@@ -66,6 +72,8 @@ export interface Landmarks {
     east: Vector3;
     north: Vector3;
   }>;
+  /** Solid things the runner can't walk through (monuments + cottages). */
+  colliders: Collider[];
   dispose(): void;
 }
 
@@ -300,6 +308,9 @@ export function buildLandmarks(): Landmarks {
 
   // ---------------------------------------------------------- placement --
   const anchors: Landmarks["anchors"] = [];
+  const colliders: Collider[] = [];
+  const LANDMARK_R = Math.cos(0.014);
+  const HOUSE_R = Math.cos(0.009);
   const anchor = new Object3D();
   const pole = new Vector3(0, 1, 0);
 
@@ -320,6 +331,7 @@ export function buildLandmarks(): Landmarks {
     holder.position.copy(p).multiplyScalar(0.998);
     // Monumental scale: buildings should tower over the runner (0.05).
     holder.scale.setScalar(1.5);
+    colliders.push({ dir: p.clone(), minDot: LANDMARK_R });
     anchor.position.copy(p);
     anchor.lookAt(p.x * 2, p.y * 2, p.z * 2);
     holder.quaternion.copy(anchor.quaternion);
@@ -363,6 +375,7 @@ export function buildLandmarks(): Landmarks {
       // 2.2x: a cottage must at least match the runner (0.05) or the scale
       // story breaks. Body sits half-height above ground; roof on top.
       tmp.scale.setScalar(2.2);
+      colliders.push({ dir: p.clone(), minDot: HOUSE_R });
       tmp.position.copy(p).addScaledVector(p, 0.013);
       tmp.updateMatrix();
       bodies.setMatrixAt(i, tmp.matrix);
@@ -380,6 +393,7 @@ export function buildLandmarks(): Landmarks {
   return {
     group,
     anchors,
+    colliders,
     dispose() {
       for (const d of disposables) d.dispose();
     },
