@@ -26,6 +26,14 @@ import { buildWhale, type Whale } from "./whale";
 import { buildSatellite, type Satellite } from "./satellite";
 import { buildPlayer, type Player } from "./player";
 import { attachInput, type GameInput } from "./input";
+import { buildRace, type Race, type RaceHud } from "./race";
+import {
+  ConeGeometry,
+  Mesh as ThreeMesh,
+  MeshBasicMaterial,
+  Quaternion,
+} from "three";
+import { INK } from "./palette";
 
 const HOME_VIEW: ViewPreset = {
   lambda: -139, // start the camera over Japan — the race will start in Tokyo
@@ -75,6 +83,10 @@ export class EarthRunApp {
   private enterFromSpin = 0;
   private player: Player | null = null;
   private input: GameInput | null = null;
+  private race: Race;
+  private guideArrow: ThreeMesh;
+  private guideDir = new Vector3();
+  private guideQuat = new Quaternion();
   private readonly canvas: HTMLCanvasElement;
   private lastTickMs = 0;
   private camTarget = new Vector3();
@@ -112,6 +124,16 @@ export class EarthRunApp {
     this.spinGroup.add(this.whale.group);
     this.satellite = buildSatellite();
     this.tiltGroup.add(this.satellite.group);
+    // Checkpoint gates ride the spin group: aligned with geography in the
+    // orbit view, world frame (identity) during play.
+    this.race = buildRace();
+    this.spinGroup.add(this.race.group);
+    this.guideArrow = new ThreeMesh(
+      new ConeGeometry(0.012, 0.034, 4),
+      new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.75 }),
+    );
+    this.guideArrow.visible = false;
+    this.scene.add(this.guideArrow);
 
     this.detachControls = attachControls({
       canvas,
@@ -146,6 +168,21 @@ export class EarthRunApp {
 
   pressJump(): void {
     this.input?.pressJump();
+  }
+
+  /** Race HUD snapshot for React (poll-friendly). */
+  raceHud(): RaceHud {
+    return this.race.hud(performance.now());
+  }
+
+  /** Reset the lap and put the runner back on the start line. */
+  restartRace(): void {
+    if (this.mode !== "play" || !this.player) return;
+    this.race.restart();
+    this.player.dispose();
+    this.scene.remove(this.player.group);
+    this.player = buildPlayer(SPAWN.lat, SPAWN.lng);
+    this.scene.add(this.player.group);
   }
 
   /** Place the sun + shader light from the shared azimuth/elevation params. */
@@ -212,7 +249,24 @@ export class EarthRunApp {
         this.mode = "play";
       }
     } else if (this.player && this.input) {
-      this.player.update(dt, this.input.read());
+      const frame = this.input.read();
+      // The clock starts the first time you move.
+      if (frame.forward !== 0 || frame.turn !== 0) this.race.start(now);
+      this.player.update(dt, frame);
+      this.race.update(now, this.player.up);
+      // Ground guide arrow toward the active gate.
+      const t = this.race.targetTangent(this.player.up, this.guideDir);
+      if (t) {
+        this.guideArrow.visible = true;
+        this.guideArrow.position
+          .copy(this.player.up)
+          .multiplyScalar(1.004)
+          .addScaledVector(t, 0.075);
+        this.guideQuat.setFromUnitVectors(this.guideArrow.up, t);
+        this.guideArrow.quaternion.copy(this.guideQuat);
+      } else {
+        this.guideArrow.visible = false;
+      }
       // Follow cam: behind and above the runner, "up" = the runner's up so
       // the horizon stays level across the whole sphere (poles included).
       const up = this.player.up;
@@ -255,6 +309,9 @@ export class EarthRunApp {
     this.birds.dispose();
     this.whale.dispose();
     this.satellite.dispose();
+    this.race.dispose();
+    this.guideArrow.geometry.dispose();
+    (this.guideArrow.material as MeshBasicMaterial).dispose();
     this.scene.traverse((obj) => {
       if (obj instanceof Mesh) {
         obj.geometry.dispose();
