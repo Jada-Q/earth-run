@@ -24,6 +24,8 @@ import { buildShips, type Ships } from "./ships";
 import { buildBirds, type Birds } from "./birds";
 import { buildWhale, type Whale } from "./whale";
 import { buildSatellite, type Satellite } from "./satellite";
+import { buildPlayer, type Player } from "./player";
+import { attachInput, type GameInput } from "./input";
 
 const HOME_VIEW: ViewPreset = {
   lambda: -139, // start the camera over Japan — the race will start in Tokyo
@@ -31,6 +33,16 @@ const HOME_VIEW: ViewPreset = {
   scale: 1.5,
   autoRotate: true,
 };
+
+const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
+const ENTER_MS = 900;
+const ORBIT_FOV = 30;
+const PLAY_FOV = 52;
+const CAM_DIST = 0.52; // behind the runner
+const CAM_HEIGHT = 0.26; // above the surface
+const CAM_SMOOTH = 7; // exponential smoothing rate
+
+type Mode = "orbit" | "entering" | "play";
 
 export interface EarthRunAppOptions {
   canvas: HTMLCanvasElement;
@@ -53,9 +65,20 @@ export class EarthRunApp {
   private satellite: Satellite;
   private sun!: DirectionalLight;
   private lightDir = new Vector3(0, 0, 1);
-  private detachControls: () => void;
+  private detachControls: (() => void) | null;
   private raf = 0;
   private disposed = false;
+
+  private mode: Mode = "orbit";
+  private enterStartMs = 0;
+  private enterFromTilt = 0;
+  private enterFromSpin = 0;
+  private player: Player | null = null;
+  private input: GameInput | null = null;
+  private readonly canvas: HTMLCanvasElement;
+  private lastTickMs = 0;
+  private camTarget = new Vector3();
+  private camLook = new Vector3();
   private onVisibility = () => {
     if (document.hidden) {
       cancelAnimationFrame(this.raf);
@@ -65,6 +88,7 @@ export class EarthRunApp {
   };
 
   constructor({ canvas }: EarthRunAppOptions) {
+    this.canvas = canvas;
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.rig = new CameraRig(HOME_VIEW);
 
@@ -102,6 +126,28 @@ export class EarthRunApp {
     this.raf = requestAnimationFrame(this.tick);
   }
 
+  /** Leave the orbit view and drop onto the planet (called from BEGIN). */
+  startGame(): void {
+    if (this.mode !== "orbit") return;
+    this.mode = "entering";
+    this.enterStartMs = performance.now();
+    this.enterFromTilt = this.rig.tiltRad();
+    // Unwind the spin to its nearest 2π multiple so the tween is short.
+    const spin = this.rig.spinRad();
+    this.enterFromSpin = spin - Math.round(spin / (2 * Math.PI)) * 2 * Math.PI;
+    this.detachControls?.();
+    this.detachControls = null;
+  }
+
+  /** Live joystick state for the HUD. */
+  joystick() {
+    return this.input?.joystick() ?? null;
+  }
+
+  pressJump(): void {
+    this.input?.pressJump();
+  }
+
   /** Place the sun + shader light from the shared azimuth/elevation params. */
   applyLightDir(): void {
     const az = (this.params.lightAzimuth * Math.PI) / 180;
@@ -136,12 +182,51 @@ export class EarthRunApp {
   private tick = (now: number) => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.tick);
+    const dt = Math.min((now - this.lastTickMs) / 1000, 0.05);
+    this.lastTickMs = now;
+    const cam = this.rig.camera;
 
-    this.rig.autoSpeed = this.params.rotationSpeed;
-    this.rig.update(now, false);
-    this.tiltGroup.rotation.x = this.rig.tiltRad();
-    this.spinGroup.rotation.y = this.rig.spinRad();
-    this.tiltGroup.position.y = Math.sin(now * 0.0004) * 0.012;
+    if (this.mode === "orbit") {
+      this.rig.autoSpeed = this.params.rotationSpeed;
+      this.rig.update(now, false);
+      this.tiltGroup.rotation.x = this.rig.tiltRad();
+      this.spinGroup.rotation.y = this.rig.spinRad();
+      this.tiltGroup.position.y = Math.sin(now * 0.0004) * 0.012;
+    } else if (this.mode === "entering") {
+      // Tween the world groups to identity so the geographic frame is the
+      // world frame, then spawn the runner.
+      const t = Math.min((now - this.enterStartMs) / ENTER_MS, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      this.tiltGroup.rotation.x = this.enterFromTilt * (1 - e);
+      this.spinGroup.rotation.y = this.enterFromSpin * (1 - e);
+      this.tiltGroup.position.y *= 1 - e;
+      if (t >= 1) {
+        this.tiltGroup.rotation.x = 0;
+        this.spinGroup.rotation.y = 0;
+        this.tiltGroup.position.y = 0;
+        this.player = buildPlayer(SPAWN.lat, SPAWN.lng);
+        this.scene.add(this.player.group);
+        this.input = attachInput(this.canvas);
+        cam.fov = PLAY_FOV;
+        cam.updateProjectionMatrix();
+        this.mode = "play";
+      }
+    } else if (this.player && this.input) {
+      this.player.update(dt, this.input.read());
+      // Follow cam: behind and above the runner, "up" = the runner's up so
+      // the horizon stays level across the whole sphere (poles included).
+      const up = this.player.up;
+      const fwd = this.player.forward;
+      this.camTarget
+        .copy(up)
+        .multiplyScalar(1 + CAM_HEIGHT)
+        .addScaledVector(fwd, -CAM_DIST);
+      const k = 1 - Math.exp(-dt * CAM_SMOOTH);
+      cam.position.lerp(this.camTarget, k);
+      cam.up.copy(up);
+      this.camLook.copy(this.player.group.position).addScaledVector(fwd, 0.16);
+      cam.lookAt(this.camLook);
+    }
 
     if (this.params.dayNight) this.applyDayNight();
     this.clouds.update(this.params.cloudSpeed);
@@ -152,13 +237,15 @@ export class EarthRunApp {
     this.satellite.update(this.params.cloudSpeed, now);
 
     this.planet.applyParams(this.params, this.lightDir);
-    this.renderer.render(this.scene, this.rig.camera);
+    this.renderer.render(this.scene, cam);
   };
 
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
-    this.detachControls();
+    this.detachControls?.();
+    this.input?.detach();
+    this.player?.dispose();
     window.removeEventListener("resize", this.resize);
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.planet.dispose();
