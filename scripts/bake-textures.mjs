@@ -258,105 +258,6 @@ function buildCityLights(mask) {
   return out;
 }
 
-// ------------------------------------------------------------------ road --
-// The race route as a painted road (its own grayscale texture — packing it
-// into the mask's alpha would let PNG premultiplication corrupt the SDF):
-// 0 = no road, ~128 = asphalt, 255 = white edge line. Wide white stroke
-// first, narrower grey on top, so white survives as the two edges.
-const ROAD_OUT = join(__dirname, "..", "public", "textures", "road.png");
-const ROUTE = [
-  [35.7, 139.7], // Tokyo
-  [34.1, -118.2],
-  [41.9, -87.6],
-  [40.7, -74.0],
-  [51.5, -0.1],
-  [48.9, 2.3],
-  [41.9, 12.5],
-  [41.0, 28.9],
-  [25.2, 55.3],
-  [28.6, 77.2],
-  [31.2, 121.5],
-  [35.7, 139.7], // back to Tokyo
-];
-
-function latLngToXyz([lat, lng]) {
-  const la = (lat * Math.PI) / 180;
-  const lo = (lng * Math.PI) / 180;
-  return [
-    Math.cos(la) * Math.cos(lo),
-    Math.sin(la),
-    -Math.cos(la) * Math.sin(lo),
-  ];
-}
-
-function xyzToPx([x, y, z]) {
-  const lat = (Math.asin(Math.max(-1, Math.min(1, y))) * 180) / Math.PI;
-  const lng = (Math.atan2(-z, x) * 180) / Math.PI;
-  return [((lng + 180) / 360) * W, ((90 - lat) / 180) * H];
-}
-
-function slerp(a, b, t) {
-  const dot = Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
-  const th = Math.acos(dot);
-  if (th < 1e-6) return a;
-  const s = Math.sin(th);
-  const ka = Math.sin((1 - t) * th) / s;
-  const kb = Math.sin(t * th) / s;
-  const v = [a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb];
-  const len = Math.hypot(v[0], v[1], v[2]);
-  return [v[0] / len, v[1] / len, v[2] / len];
-}
-
-function bakeRoad() {
-  // Higher res than the mask — the road is seen from street level at ~10x
-  // magnification; mostly-black PNG stays small.
-  const RW = 4096;
-  const RH = 2048;
-  const canvas = createCanvas(RW, RH);
-  const ctx = canvas.getContext("2d");
-  ctx.scale(RW / W, RH / H); // keep route math in mask coords
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, W, H);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  // Route → polylines, split at the antimeridian seam.
-  const polys = [];
-  let cur = [];
-  let prevPx = null;
-  for (let leg = 0; leg < ROUTE.length - 1; leg++) {
-    const a = latLngToXyz(ROUTE[leg]);
-    const b = latLngToXyz(ROUTE[leg + 1]);
-    for (let i = 0; i <= 220; i++) {
-      const p = xyzToPx(slerp(a, b, i / 220));
-      if (prevPx && Math.abs(p[0] - prevPx[0]) > W / 2) {
-        polys.push(cur);
-        cur = [];
-      }
-      cur.push(p);
-      prevPx = p;
-    }
-  }
-  polys.push(cur);
-
-  const strokeAll = (width, style) => {
-    ctx.strokeStyle = style;
-    ctx.lineWidth = width;
-    for (const poly of polys) {
-      if (poly.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k][0], poly[k][1]);
-      ctx.stroke();
-    }
-  };
-  strokeAll(11, "#ffffff"); // edge lines
-  strokeAll(7, "#808080"); // asphalt
-
-  writeFileSync(ROAD_OUT, canvas.toBuffer("image/png"));
-  return canvas;
-}
-
 // ------------------------------------------------------------------ main --
 console.time("rasterize");
 const mask = rasterizeLand();
@@ -374,9 +275,6 @@ console.time("cities");
 const city = buildCityLights(mask);
 console.timeEnd("cities");
 
-console.time("road");
-bakeRoad();
-console.timeEnd("road");
 
 const out = createCanvas(W, H);
 const octx = out.getContext("2d");

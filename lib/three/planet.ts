@@ -30,7 +30,6 @@ const VERT = /* glsl */ `
 
 const FRAG = /* glsl */ `
   uniform sampler2D uMask;
-  uniform sampler2D uRoad;
   uniform vec3 uSea;
   uniform vec3 uLand;
   uniform vec3 uVegetation;
@@ -57,15 +56,6 @@ const FRAG = /* glsl */ `
     // Coastline ink band hugging d = 0.5.
     float ink = 1.0 - smoothstep(uInkWidth, uInkWidth + w, abs(d - 0.5));
     albedo = mix(albedo, uInk, ink * uInkStrength);
-
-    // Race road: 0 none, ~0.5 asphalt, 1.0 white edge lines. Land only —
-    // a highway floating on the open sea reads as a glitch, not a track.
-    float roadV = texture2D(uRoad, vUv).r;
-    float rw = fwidth(roadV) * 1.2;
-    float edgeLine = smoothstep(0.72 - rw, 0.72 + rw, roadV) * land;
-    float asphalt = (smoothstep(0.28 - rw, 0.28 + rw, roadV)) * land - edgeLine;
-    albedo = mix(albedo, vec3(0.36, 0.43, 0.45), max(asphalt, 0.0));
-    albedo = mix(albedo, vec3(0.95, 0.94, 0.9), edgeLine);
 
     // Quantized toon shading from the uniform sun.
     float ndl = dot(normalize(vNormal), uLightDir) * 0.5 + 0.5;
@@ -94,15 +84,12 @@ export function buildPlanet(params: ToonParams): Planet {
 
   const tex: Texture = new TextureLoader().load("/textures/planet-mask.png");
   tex.anisotropy = 4;
-  const roadTex: Texture = new TextureLoader().load("/textures/road.png");
-  roadTex.anisotropy = 4;
 
   const material = new ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
     uniforms: {
       uMask: { value: tex },
-      uRoad: { value: roadTex },
       uSea: { value: new Color(SEA) },
       uLand: { value: new Color(PAPER) },
       uVegetation: { value: new Color(VEGETATION) },
@@ -155,7 +142,6 @@ export function buildPlanet(params: ToonParams): Planet {
       material.dispose();
       hullMat.dispose();
       tex.dispose();
-      roadTex.dispose();
     },
   };
 }
