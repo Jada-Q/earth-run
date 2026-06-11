@@ -1,6 +1,7 @@
-// The runner — a toon courier built from boxes with thin ink hulls,
-// procedurally animated (no skeleton): swinging limbs for the run cycle, a
-// gentle breathe for idle, tucked legs mid-jump.
+// The runner — chunky big-head proportions (head ≈ half the body height,
+// stub limbs, bold simple face), flat toon colors, thin ink hulls. Our own
+// design in the reference sheet's style language. Procedurally animated:
+// swinging stubs for the run cycle, a breathe for idle, tuck for jumps.
 //
 // Local frame: +X = facing/travel direction, +Y = up (radial), origin at
 // the soles of the feet.
@@ -18,8 +19,8 @@ import { makeGradientMap } from "./clouds";
 
 export type RunnerPose = "idle" | "run" | "jump";
 
-const SCALE = 0.042;
-const HULL = 1.07; // thin ink edge — thick hulls read as chunky up close
+const SCALE = 0.05;
+const HULL = 1.06;
 
 export interface Runner {
   group: Group;
@@ -37,15 +38,17 @@ export function buildRunner(): Runner {
   const matOf = (hex: string) => {
     const m = new MeshToonMaterial({
       color: hex,
-      gradientMap: makeGradientMap(3, 0.8),
+      gradientMap: makeGradientMap(3, 0.82),
     });
     mats.push(m);
     return m;
   };
-  const paper = matOf("#f2efe6");
   const teal = matOf("#2e5d66");
-  const skin = matOf("#e8d5b5");
+  const paper = matOf("#f2efe6");
+  const skin = matOf("#eecfa4");
   const sage = matOf("#9fbfa8");
+  const crest = matOf("#d2693e"); // mohawk crest — one warm chunk, like the sheet
+  const white = new MeshBasicMaterial({ color: "#fbfaf5" });
   const inkSolid = new MeshBasicMaterial({ color: INK });
   const inkHull = new MeshBasicMaterial({ color: INK, side: BackSide });
 
@@ -75,20 +78,27 @@ export function buildRunner(): Runner {
     return m;
   };
 
-  // ---- torso, bag, head -----------------------------------------------
-  addBox(body, teal, 0.34, 0.34, 0.2, 0, 0.6, 0); // jacket
-  addBox(body, paper, 0.35, 0.1, 0.21, 0, 0.46, 0); // hem stripe
-  addBox(body, sage, 0.16, 0.2, 0.08, -0.16, 0.62, 0); // messenger bag (back)
-  addBox(body, sage, 0.04, 0.26, 0.21, 0.02, 0.7, 0); // bag strap across
-  addBox(body, skin, 0.22, 0.2, 0.2, 0, 0.88, 0); // head
-  // eyes — tiny ink squares on the face (+X side)
-  addBox(body, inkSolid, 0.012, 0.035, 0.03, 0.112, 0.9, -0.05, false);
-  addBox(body, inkSolid, 0.012, 0.035, 0.03, 0.112, 0.9, 0.05, false);
-  // cap + brim
-  addBox(body, teal, 0.24, 0.07, 0.22, 0, 1.0, 0);
-  addBox(body, teal, 0.12, 0.03, 0.18, 0.16, 0.985, 0);
+  // ---- squat body + messenger bag ---------------------------------------
+  addBox(body, teal, 0.42, 0.3, 0.3, 0, 0.3, 0); // torso
+  addBox(body, paper, 0.43, 0.09, 0.31, 0, 0.19, 0); // hem stripe
+  addBox(body, sage, 0.05, 0.24, 0.31, 0.0, 0.34, 0); // bag strap
+  addBox(body, sage, 0.18, 0.2, 0.1, -0.24, 0.32, 0); // bag on the back
 
-  // ---- limbs (pivots at shoulder/hip so they swing) ---------------------
+  // ---- BIG head ----------------------------------------------------------
+  addBox(body, skin, 0.46, 0.42, 0.44, 0, 0.68, 0);
+  // big eyes: white blocks + ink pupils on the +X face
+  addBox(body, white, 0.02, 0.13, 0.1, 0.232, 0.68, -0.1, false);
+  addBox(body, white, 0.02, 0.13, 0.1, 0.232, 0.68, 0.1, false);
+  addBox(body, inkSolid, 0.014, 0.07, 0.05, 0.242, 0.66, -0.085, false);
+  addBox(body, inkSolid, 0.014, 0.07, 0.05, 0.242, 0.66, 0.085, false);
+  // little mouth
+  addBox(body, inkSolid, 0.012, 0.025, 0.07, 0.236, 0.545, 0, false);
+  // mohawk crest front-to-back + cap band
+  addBox(body, crest, 0.34, 0.12, 0.1, -0.02, 0.94, 0);
+  addBox(body, teal, 0.48, 0.07, 0.46, 0, 0.875, 0); // cap band
+  addBox(body, teal, 0.14, 0.035, 0.34, 0.27, 0.86, 0); // brim
+
+  // ---- stub limbs (pivots at shoulder/hip) -------------------------------
   const makeLimb = (
     px: number,
     py: number,
@@ -106,7 +116,7 @@ export function buildRunner(): Runner {
       tip.h,
       tip.d,
       tip.fwd ?? 0,
-      -upper.len - tip.h / 2 + 0.01,
+      -upper.len - tip.h / 2 + 0.012,
       0,
     );
     body.add(pivot);
@@ -114,24 +124,24 @@ export function buildRunner(): Runner {
   };
 
   const armL = makeLimb(
-    0, 0.72, -0.22,
-    { mat: teal, len: 0.24, thick: 0.085 },
-    { mat: skin, w: 0.08, h: 0.08, d: 0.08 },
+    0, 0.42, -0.26,
+    { mat: teal, len: 0.16, thick: 0.1 },
+    { mat: skin, w: 0.1, h: 0.09, d: 0.1 },
   );
   const armR = makeLimb(
-    0, 0.72, 0.22,
-    { mat: teal, len: 0.24, thick: 0.085 },
-    { mat: skin, w: 0.08, h: 0.08, d: 0.08 },
+    0, 0.42, 0.26,
+    { mat: teal, len: 0.16, thick: 0.1 },
+    { mat: skin, w: 0.1, h: 0.09, d: 0.1 },
   );
   const legL = makeLimb(
-    0, 0.42, -0.08,
-    { mat: paper, len: 0.32, thick: 0.11 },
-    { mat: teal, w: 0.17, h: 0.07, d: 0.12, fwd: 0.035 }, // shoe, toe forward
+    0, 0.16, -0.1,
+    { mat: skin, len: 0.08, thick: 0.11 },
+    { mat: crest, w: 0.2, h: 0.08, d: 0.14, fwd: 0.045 }, // chunky shoes
   );
   const legR = makeLimb(
-    0, 0.42, 0.08,
-    { mat: paper, len: 0.32, thick: 0.11 },
-    { mat: teal, w: 0.17, h: 0.07, d: 0.12, fwd: 0.035 },
+    0, 0.16, 0.1,
+    { mat: skin, len: 0.08, thick: 0.11 },
+    { mat: crest, w: 0.2, h: 0.08, d: 0.14, fwd: 0.045 },
   );
 
   root.scale.setScalar(SCALE);
@@ -141,26 +151,27 @@ export function buildRunner(): Runner {
     setPose(pose: RunnerPose, phase: number) {
       if (pose === "run") {
         const s = Math.sin(phase);
-        legL.rotation.z = s * 0.95;
-        legR.rotation.z = -s * 0.95;
-        armL.rotation.z = -s * 0.8;
-        armR.rotation.z = s * 0.8;
-        body.position.y = Math.abs(Math.cos(phase)) * 0.05;
-        body.rotation.z = -0.14; // forward lean
+        legL.rotation.z = s * 1.1;
+        legR.rotation.z = -s * 1.1;
+        armL.rotation.z = -s * 0.9;
+        armR.rotation.z = s * 0.9;
+        // Big-head bounce sells the chunky run.
+        body.position.y = Math.abs(Math.cos(phase)) * 0.07;
+        body.rotation.z = -0.12;
       } else if (pose === "jump") {
-        legL.rotation.z = 0.55;
-        legR.rotation.z = -0.4;
-        armL.rotation.z = -1.5;
-        armR.rotation.z = -1.5;
+        legL.rotation.z = 0.7;
+        legR.rotation.z = -0.5;
+        armL.rotation.z = -1.6;
+        armR.rotation.z = -1.6;
         body.position.y = 0;
-        body.rotation.z = -0.06;
+        body.rotation.z = -0.05;
       } else {
-        const breathe = Math.sin(phase * 0.15) * 0.05;
+        const breathe = Math.sin(phase * 0.15);
         legL.rotation.z = 0;
         legR.rotation.z = 0;
-        armL.rotation.z = breathe;
-        armR.rotation.z = -breathe;
-        body.position.y = 0;
+        armL.rotation.z = breathe * 0.08;
+        armR.rotation.z = -breathe * 0.08;
+        body.position.y = Math.max(0, breathe) * 0.012;
         body.rotation.z = 0;
       }
     },
@@ -170,6 +181,7 @@ export function buildRunner(): Runner {
         m.gradientMap?.dispose();
         m.dispose();
       }
+      white.dispose();
       inkSolid.dispose();
       inkHull.dispose();
     },

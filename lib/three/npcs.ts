@@ -85,14 +85,17 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
     return seed / 4294967296;
   };
 
-  // Chibi person: legs, body, head. Faces +X, origin at soles. ~60% runner.
+  // Big-head resident: stub legs, squat body, oversized head with a hair
+  // chunk. Faces +X, origin at soles. ~60% of the runner.
+  const HAIR = ["#3a4d48", "#d2693e", "#c4798c", "#8a7d62"];
   const buildPerson = (shirt: string): Group => {
     const g = new Group();
-    prim(g, 0.06, 0.2, 0.06, "#e9e5d8", 0, 0.1, -0.05);
-    prim(g, 0.06, 0.2, 0.06, "#e9e5d8", 0, 0.1, 0.05);
-    prim(g, 0.17, 0.2, 0.15, shirt, 0, 0.3, 0);
-    prim(g, 0.14, 0.13, 0.13, "#e8d5b5", 0, 0.47, 0);
-    g.scale.setScalar(0.028);
+    prim(g, 0.07, 0.08, 0.07, "#eecfa4", 0, 0.04, -0.06);
+    prim(g, 0.07, 0.08, 0.07, "#eecfa4", 0, 0.04, 0.06);
+    prim(g, 0.24, 0.18, 0.17, shirt, 0, 0.17, 0);
+    prim(g, 0.26, 0.24, 0.25, "#eecfa4", 0, 0.38, 0);
+    prim(g, 0.27, 0.06, 0.26, HAIR[Math.floor(rng() * HAIR.length)], 0, 0.52, 0);
+    g.scale.setScalar(0.032);
     return g;
   };
 
