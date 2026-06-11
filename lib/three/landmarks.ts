@@ -378,14 +378,33 @@ export function buildLandmarks(): Landmarks {
   const m4 = new Matrix4();
   let i = 0;
   for (const a of anchors) {
+    // Monument discs were pushed in anchor order: index 0..10.
+    const monument = colliders[anchors.indexOf(a)];
+    const placedHouses: Vector3[] = [];
     for (let h = 0; h < HOUSES_PER_CITY; h++) {
-      const ang = rng() * Math.PI * 2;
-      const rad = 0.028 + rng() * 0.03;
-      const p = new Vector3()
-        .copy(a.dir)
-        .addScaledVector(a.east, Math.cos(ang) * rad)
-        .addScaledVector(a.north, Math.sin(ang) * rad)
-        .normalize();
+      // Rejection-resample: a cottage inside the monument's keep-out (or
+      // overlapping a sibling) creates overlapping collision discs — the
+      // runner ping-pongs between their boundaries forever.
+      let p = new Vector3();
+      let ok = false;
+      for (let tries = 0; tries < 24 && !ok; tries++) {
+        const ang = rng() * Math.PI * 2;
+        const rad = 0.028 + rng() * 0.03;
+        p = new Vector3()
+          .copy(a.dir)
+          .addScaledVector(a.east, Math.cos(ang) * rad)
+          .addScaledVector(a.north, Math.sin(ang) * rad)
+          .normalize();
+        const clearOfMonument =
+          p.dot(monument.dir) <
+          Math.cos(Math.acos(monument.minDot) + 0.016 + 0.004);
+        const clearOfSiblings = placedHouses.every(
+          (q2) => p.dot(q2) < Math.cos(0.026),
+        );
+        ok = clearOfMonument && clearOfSiblings;
+      }
+      if (!ok) continue; // crowded city — fewer cottages beats overlap
+      placedHouses.push(p.clone());
       tmp.position.copy(p);
       tmp.lookAt(p.x * 2, p.y * 2, p.z * 2);
       tmp.rotateX(Math.PI / 2);

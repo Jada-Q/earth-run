@@ -276,25 +276,33 @@ export function buildPlayer(
       // δ = θ − minθ (negative). The first version had it inverted and
       // SUCKED the runner into building centers.
       if (colliders && jumpH === 0) {
-        up.set(0, 1, 0).applyQuaternion(q);
-        for (const c of colliders) {
-          const d = up.dot(c.dir);
-          if (d > c.minDot) {
-            const theta = Math.acos(Math.min(1, d));
-            const minTheta = Math.acos(Math.min(1, c.minDot));
-            axis.copy(up).cross(c.dir);
-            if (axis.lengthSq() < 1e-10) {
-              // Dead center (e.g. landed on the exact spot) — kick out
-              // along the facing direction instead of dividing by zero.
-              fwd.set(1, 0, 0).applyQuaternion(q);
-              axis.copy(fwd).cross(c.dir);
-              if (axis.lengthSq() < 1e-10) continue;
+        // Two passes: statics are de-overlapped at build time, but if a
+        // pair still overlaps, a single pass ping-pongs between their
+        // boundaries — the second pass settles it within the frame.
+        for (let pass = 0; pass < 2; pass++) {
+          up.set(0, 1, 0).applyQuaternion(q);
+          let touched = false;
+          for (const c of colliders) {
+            const d = up.dot(c.dir);
+            if (d > c.minDot) {
+              touched = true;
+              const theta = Math.acos(Math.min(1, d));
+              const minTheta = Math.acos(Math.min(1, c.minDot));
+              axis.copy(up).cross(c.dir);
+              if (axis.lengthSq() < 1e-10) {
+                // Dead center (e.g. landed on the exact spot) — kick out
+                // along the facing direction instead of dividing by zero.
+                fwd.set(1, 0, 0).applyQuaternion(q);
+                axis.copy(fwd).cross(c.dir);
+                if (axis.lengthSq() < 1e-10) continue;
+              }
+              axis.normalize();
+              step.setFromAxisAngle(axis, theta - minTheta);
+              q.premultiply(step);
+              up.set(0, 1, 0).applyQuaternion(q);
             }
-            axis.normalize();
-            step.setFromAxisAngle(axis, theta - minTheta);
-            q.premultiply(step);
-            up.set(0, 1, 0).applyQuaternion(q);
           }
+          if (!touched) break;
         }
       }
 

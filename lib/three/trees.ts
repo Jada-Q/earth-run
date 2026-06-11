@@ -146,6 +146,7 @@ export function buildTrees(landmarks: Landmarks): Trees {
     const [mask] = await Promise.all([loadLandMask(), ensureElevationLoaded()]);
     let i = 0;
 
+    const MIN_TREE_GAP = Math.cos(0.011);
     const place = (lat: number, lng: number) => {
       const latR = (lat * Math.PI) / 180;
       const lngR = (lng * Math.PI) / 180;
@@ -154,6 +155,11 @@ export function buildTrees(landmarks: Landmarks): Trees {
         Math.sin(latR),
         -Math.cos(latR) * Math.sin(lngR),
       );
+      // No overlapping trunks — twin discs trap the runner between their
+      // boundaries (ping-pong jitter).
+      for (const other of recs) {
+        if (pos.dot(other.dir) > MIN_TREE_GAP) return;
+      }
       const rec: TreeRec = {
         dir: pos.clone(),
         s: BASE * (0.7 + rng() * 0.8),
