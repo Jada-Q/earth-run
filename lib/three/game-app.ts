@@ -27,6 +27,7 @@ import { buildSatellite, type Satellite } from "./satellite";
 import { buildPlayer, type Player } from "./player";
 import { attachInput, type GameInput } from "./input";
 import { buildRace, type Race, type RaceHud } from "./race";
+import { buildIntroLetters, type IntroLetters } from "./intro-letters";
 import {
   ConeGeometry,
   Mesh as ThreeMesh,
@@ -84,6 +85,7 @@ export class EarthRunApp {
   private player: Player | null = null;
   private input: GameInput | null = null;
   private race: Race;
+  private introLetters: IntroLetters | null = null;
   private guideArrow: ThreeMesh;
   private guideDir = new Vector3();
   private guideQuat = new Quaternion();
@@ -135,6 +137,9 @@ export class EarthRunApp {
     this.guideArrow.visible = false;
     this.scene.add(this.guideArrow);
 
+    this.introLetters = buildIntroLetters();
+    this.scene.add(this.introLetters.group);
+
     this.detachControls = attachControls({
       canvas,
       rig: this.rig,
@@ -151,6 +156,7 @@ export class EarthRunApp {
   /** Leave the orbit view and drop onto the planet (called from BEGIN). */
   startGame(): void {
     if (this.mode !== "orbit") return;
+    this.introLetters?.startExit(performance.now());
     this.mode = "entering";
     this.enterStartMs = performance.now();
     this.enterFromTilt = this.rig.tiltRad();
@@ -282,6 +288,12 @@ export class EarthRunApp {
       cam.lookAt(this.camLook);
     }
 
+    if (this.introLetters && this.introLetters.update(now)) {
+      this.scene.remove(this.introLetters.group);
+      this.introLetters.dispose();
+      this.introLetters = null;
+    }
+
     if (this.params.dayNight) this.applyDayNight();
     this.clouds.update(this.params.cloudSpeed);
     this.planes.update(this.params.cloudSpeed);
@@ -310,6 +322,7 @@ export class EarthRunApp {
     this.whale.dispose();
     this.satellite.dispose();
     this.race.dispose();
+    this.introLetters?.dispose();
     this.guideArrow.geometry.dispose();
     (this.guideArrow.material as MeshBasicMaterial).dispose();
     this.scene.traverse((obj) => {

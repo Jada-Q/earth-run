@@ -68,10 +68,7 @@ export default function Game() {
         aria-label="Earth Run"
       />
       {!started ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[12%] z-40 flex flex-col items-center gap-6">
-          <div className="select-none text-center font-mono text-4xl font-bold uppercase tracking-[0.35em] text-[#22302c] md:text-5xl">
-            Earth Run
-          </div>
+        <div className="pointer-events-none fixed inset-x-0 bottom-[10%] z-40 flex flex-col items-center gap-5">
           <button
             type="button"
             onClick={handleBegin}
