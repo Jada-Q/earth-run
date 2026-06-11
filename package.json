@@ -1,0 +1,33 @@
+{
+  "name": "earth-run",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3014",
+    "build": "next build",
+    "start": "next start",
+    "bake": "node scripts/bake-textures.mjs"
+  },
+  "dependencies": {
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.65",
+    "@tailwindcss/postcss": "^4",
+    "@tweakpane/core": "^2.0.5",
+    "@types/d3-geo": "^3.1.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.180.0",
+    "d3-geo": "^3.1.1",
+    "tailwindcss": "^4",
+    "topojson-client": "^3.1.0",
+    "tweakpane": "^4.0.5",
+    "typescript": "^5",
+    "world-atlas": "^2.0.2"
+  }
+}
