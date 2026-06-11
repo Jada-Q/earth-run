@@ -37,15 +37,27 @@ export function ensureElevationLoaded(): void {
 }
 
 /** Terrain height (world units above the unit sphere) at a surface
- *  direction. Bilinear-free nearest sample — at game scale one texel is
- *  ~10km, plenty smooth under a runner. */
+ *  direction. Bilinear-interpolated — nearest sampling gave the runner a
+ *  staircase ride across texel boundaries. */
 export function groundHeightAt(up: Vector3): number {
   if (!map) return 0;
   const lat = (Math.asin(Math.max(-1, Math.min(1, up.y))) * 180) / Math.PI;
   const lng = (Math.atan2(-up.z, up.x) * 180) / Math.PI;
-  const u = (lng + 180) / 360;
-  const v = (90 - lat) / 180;
-  const px = Math.min(map.w - 1, Math.max(0, Math.round(u * map.w)));
-  const py = Math.min(map.h - 1, Math.max(0, Math.round(v * map.h)));
-  return (map.data[(py * map.w + px) * 4] / 255) * TERRAIN_SCALE;
+  const fx = ((lng + 180) / 360) * map.w - 0.5;
+  const fy = ((90 - lat) / 180) * map.h - 0.5;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const at = (x: number, y: number) => {
+    const cx = ((x % map!.w) + map!.w) % map!.w; // lng wraps
+    const cy = Math.min(map!.h - 1, Math.max(0, y));
+    return map!.data[(cy * map!.w + cx) * 4];
+  };
+  const h =
+    at(x0, y0) * (1 - tx) * (1 - ty) +
+    at(x0 + 1, y0) * tx * (1 - ty) +
+    at(x0, y0 + 1) * (1 - tx) * ty +
+    at(x0 + 1, y0 + 1) * tx * ty;
+  return (h / 255) * TERRAIN_SCALE;
 }

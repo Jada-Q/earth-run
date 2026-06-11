@@ -57,10 +57,13 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
   let jumpV = 0;
   let runPhase = 0;
   let pose: RunnerPose = "idle";
+  let pitch = 0; // smoothed terrain pitch (positive = climbing)
 
   const axis = new Vector3();
   const step = new Quaternion();
   const fwd = new Vector3();
+  const probe = new Vector3();
+  const PROBE_ARC = 0.012; // sample terrain this far ahead/behind (radians)
 
   const apply = () => {
     up.set(0, 1, 0).applyQuaternion(q);
@@ -83,11 +86,25 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
         step.setFromAxisAngle(axis, input.turn * TURN_SPEED * dt);
         q.premultiply(step);
       }
+      // Terrain pitch under the runner: sample ground ahead vs behind.
+      // Drives the climb/descend body lean AND the speed (slower uphill,
+      // faster downhill) — the feel of actually working up a mountain.
+      up.set(0, 1, 0).applyQuaternion(q);
+      fwd.set(1, 0, 0).applyQuaternion(q);
+      probe.copy(up).addScaledVector(fwd, PROBE_ARC).normalize();
+      const hAhead = groundHeightAt(probe);
+      probe.copy(up).addScaledVector(fwd, -PROBE_ARC).normalize();
+      const hBehind = groundHeightAt(probe);
+      const slope = (hAhead - hBehind) / (2 * PROBE_ARC);
+      const targetPitch = Math.atan(slope);
+      pitch += (targetPitch - pitch) * Math.min(1, dt * 10);
+
       // Advance along the great circle (rotate about local -Z = up×forward).
+      const slopeFactor = Math.min(1.35, Math.max(0.55, 1 - slope * 2.0));
       const speed =
-        input.forward > 0
+        (input.forward > 0
           ? input.forward * RUN_SPEED
-          : input.forward * BACK_SPEED;
+          : input.forward * BACK_SPEED) * slopeFactor;
       if (speed !== 0) {
         axis.set(0, 0, -1).applyQuaternion(q);
         step.setFromAxisAngle(axis, speed * dt);
@@ -108,6 +125,8 @@ export function buildPlayer(spawnLat: number, spawnLng: number): Player {
       pose =
         jumpH > 0 ? "jump" : Math.abs(input.forward) > 0.05 ? "run" : "idle";
       runner.setPose(pose, pose === "idle" ? performance.now() * 0.01 : runPhase);
+      // Lean the whole body into the slope (about local Z, nose up/down).
+      runner.group.rotation.z = Math.max(-0.45, Math.min(0.45, pitch * 0.8));
       apply();
     },
     dispose() {

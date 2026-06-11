@@ -40,11 +40,22 @@ const VERT = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vNormal;
   varying float vElev;
+  varying vec3 vEastW;
+  varying vec3 vNorthW;
+  varying float vCosLat;
   uniform sampler2D uElev;
   uniform float uTerrain;
   void main() {
     vUv = uv;
-    vNormal = normalize(mat3(modelMatrix) * normal);
+    vec3 n0 = normalize(position);
+    vNormal = normalize(mat3(modelMatrix) * n0);
+    // Geographic tangent basis for fragment-level terrain normals.
+    vec3 east = cross(vec3(0.0, 1.0, 0.0), n0);
+    vCosLat = length(east);
+    east = vCosLat > 0.001 ? east / vCosLat : vec3(1.0, 0.0, 0.0);
+    vec3 north = cross(n0, east);
+    vEastW = normalize(mat3(modelMatrix) * east);
+    vNorthW = normalize(mat3(modelMatrix) * north);
     float e = texture2D(uElev, uv).r;
     vElev = e;
     vec3 p = position * (1.0 + e * uTerrain);
@@ -54,6 +65,9 @@ const VERT = /* glsl */ `
 
 const FRAG = /* glsl */ `
   uniform sampler2D uMask;
+  uniform sampler2D uElev;
+  uniform float uTerrain;
+  uniform float uRelief;
   uniform vec3 uSea;
   uniform vec3 uLand;
   uniform vec3 uVegetation;
@@ -67,6 +81,9 @@ const FRAG = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vNormal;
   varying float vElev;
+  varying vec3 vEastW;
+  varying vec3 vNorthW;
+  varying float vCosLat;
 
   void main() {
     vec4 m = texture2D(uMask, vUv);
@@ -81,18 +98,42 @@ const FRAG = /* glsl */ `
     // Elevation ramp: lowland colors → rocky brown → snow caps.
     vec3 rock = vec3(0.62, 0.55, 0.46);
     vec3 snow = vec3(0.95, 0.95, 0.93);
-    albedo = mix(albedo, rock, smoothstep(0.18, 0.42, vElev) * land);
-    albedo = mix(albedo, snow, smoothstep(0.5, 0.72, vElev) * land);
+    albedo = mix(albedo, rock, smoothstep(0.14, 0.38, vElev) * land);
+    albedo = mix(albedo, snow, smoothstep(0.48, 0.7, vElev) * land);
 
     // Coastline ink band hugging d = 0.5.
     float ink = 1.0 - smoothstep(uInkWidth, uInkWidth + w, abs(d - 0.5));
     albedo = mix(albedo, uInk, ink * uInkStrength);
 
-    // Quantized toon shading from the uniform sun.
-    float ndl = dot(normalize(vNormal), uLightDir) * 0.5 + 0.5;
+    // --- per-pixel terrain normal (central differences on the heightmap).
+    // Without this, displaced mountains have sphere-smooth lighting and
+    // read as flat blobs — relief lives in the shading, not the silhouette.
+    vec2 du = vec2(1.0 / 2048.0, 0.0);
+    vec2 dv = vec2(0.0, 1.0 / 1024.0);
+    float hE = texture2D(uElev, vUv + du).r;
+    float hW = texture2D(uElev, vUv - du).r;
+    float hN = texture2D(uElev, vUv - dv).r; // v grows southward
+    float hS = texture2D(uElev, vUv + dv).r;
+    float arcE = 6.2832 / 2048.0 * max(vCosLat, 0.05);
+    float arcN = 3.1416 / 1024.0;
+    float slopeE = (hE - hW) * uTerrain / (2.0 * arcE);
+    float slopeN = (hN - hS) * uTerrain / (2.0 * arcN);
+    vec3 nT = normalize(
+      normalize(vNormal)
+        - vEastW * slopeE * uRelief
+        - vNorthW * slopeN * uRelief
+    );
+
+    // Quantized toon shading from the uniform sun, terrain-aware.
+    float ndl = dot(nT, uLightDir) * 0.5 + 0.5;
     float band = floor(ndl * uSteps) / max(uSteps - 1.0, 1.0);
     band = clamp(band, 0.0, 1.0);
     vec3 color = albedo * mix(uShadeMul, 1.0, band);
+
+    // Extra soft hillshade on top of the bands so ridge/valley detail
+    // survives quantization (subtle, terrain only).
+    float slopeShade = clamp(dot(nT, uLightDir) - dot(normalize(vNormal), uLightDir), -0.5, 0.5);
+    color *= 1.0 + slopeShade * 0.55 * land;
 
     // City lights bloom on the night side only (raw ndl, not banded —
     // they should fade in smoothly as a region rolls into darkness).
@@ -124,6 +165,7 @@ export function buildPlanet(params: ToonParams): Planet {
       uMask: { value: tex },
       uElev: { value: elevTex },
       uTerrain: { value: TERRAIN_SCALE },
+      uRelief: { value: 1.0 },
       uSea: { value: new Color(SEA) },
       uLand: { value: new Color(PAPER) },
       uVegetation: { value: new Color(VEGETATION) },
