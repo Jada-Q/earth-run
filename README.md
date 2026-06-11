@@ -1,13 +1,13 @@
 # Earth Run
 
-![Earth Run — Tokyo Tower spawn](docs/screenshot.png)
-
 Race a little runner around a tiny toon planet — eastbound from Tokyo,
 through 11 city checkpoint gates, back to the start line. Past drifting
 clouds, blocky airplanes with contrails, ships that fade out near
 coastlines, V-formations of birds, the occasional whale, and a satellite
 watching it all. The sun follows your local clock; city lights come up on
 the night side.
+
+![Earth Run — Tokyo Tower spawn](docs/screenshot.png)
 
 Sister piece to [Quake Globe](https://github.com/Jada-Q/quake-globe) —
 the rendering engine (SDF land-mask toon planet, ink outlines, the whole
