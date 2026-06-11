@@ -15,6 +15,8 @@ import {
 import { INK } from "./palette";
 import { makeGradientMap } from "./clouds";
 import { groundHeightAt } from "./elevation";
+import { loadLandMask, isSea, type LandMask } from "./ships";
+import { vec3ToLatLng } from "./geo";
 
 const SCALE = 0.022;
 const FOLLOW_BACK = 0.012; // radians behind the runner
@@ -29,6 +31,10 @@ export interface Companion {
 
 export function buildCompanion(): Companion {
   const group = new Group();
+  let mask: LandMask | null = null;
+  void loadLandMask().then((m) => {
+    mask = m;
+  });
   const mats: MeshToonMaterial[] = [];
   const matOf = (hex: string) => {
     const m = new MeshToonMaterial({
@@ -122,6 +128,11 @@ export function buildCompanion(): Companion {
         .copy(dir)
         .multiplyScalar(1 + groundHeightAt(dir) + bounce);
       tail.rotation.x = Math.sin(nowMs * 0.014) * 0.6;
+      // Dogs don't walk on water — hide at sea, catch up on the next shore.
+      if (mask) {
+        const ll = vec3ToLatLng(dir);
+        group.visible = !isSea(mask, ll.lat, ll.lng);
+      }
     },
     dispose() {
       for (const g of geos) g.dispose();

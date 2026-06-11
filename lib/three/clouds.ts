@@ -67,9 +67,11 @@ export function buildClouds(): Clouds {
   const offset = new Matrix4();
 
   const SHELLS = [
-    { radius: 1.07, tiltX: 0.3, tiltZ: 0.15, clusters: 3, speed: 0.00045 },
-    { radius: 1.1, tiltX: -0.2, tiltZ: 0.4, clusters: 3, speed: -0.0003 },
-    { radius: 1.13, tiltX: 0.5, tiltZ: -0.25, clusters: 2, speed: 0.0006 },
+    // Above the tallest landmark (~1.17 after the 1.5x monument scale) —
+    // clouds drifting THROUGH skyscrapers read as a glitch.
+    { radius: 1.2, tiltX: 0.3, tiltZ: 0.15, clusters: 3, speed: 0.00045 },
+    { radius: 1.23, tiltX: -0.2, tiltZ: 0.4, clusters: 3, speed: -0.0003 },
+    { radius: 1.27, tiltX: 0.5, tiltZ: -0.25, clusters: 2, speed: 0.0006 },
   ];
 
   for (const cfg of SHELLS) {

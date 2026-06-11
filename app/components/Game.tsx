@@ -27,6 +27,9 @@ export default function Game() {
   const [hud, setHud] = useState<RaceHud | null>(null);
   const [outfitIdx, setOutfitIdx] = useState(0);
   const [landmark, setLandmark] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
+  const lastLandmarkRef = useRef<string | null>(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const saved = Number(localStorage.getItem(OUTFIT_KEY));
@@ -41,7 +44,16 @@ export default function Game() {
     const id = setInterval(() => {
       const h = appRef.current?.raceHud();
       if (h) setHud(h);
-      setLandmark(appRef.current?.nearbyLandmark() ?? null);
+      const lm = appRef.current?.nearbyLandmark() ?? null;
+      setLandmark(lm);
+      // Arriving at a NEW landmark → big title card for 3.5s.
+      if (lm && lm !== lastLandmarkRef.current) {
+        lastLandmarkRef.current = lm;
+        setBanner(lm);
+        if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+        bannerTimerRef.current = setTimeout(() => setBanner(null), 3500);
+      }
+      if (!lm) lastLandmarkRef.current = null;
     }, 100);
     return () => clearInterval(id);
   }, [started]);
@@ -169,7 +181,18 @@ export default function Game() {
               </div>
             </div>
           ) : null}
-          {landmark ? (
+          {banner ? (
+            <div className="pointer-events-none fixed inset-x-0 top-[18%] z-40 flex justify-center px-4">
+              <div className="select-none rounded-lg border-[3px] border-[#22302c] bg-[#efece3]/95 px-8 py-4 text-center shadow-[5px_5px_0_rgba(34,48,44,0.4)]">
+                <div className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#22302c]/60">
+                  You've reached
+                </div>
+                <div className="mt-1 font-serif text-2xl font-semibold italic text-[#22302c] md:text-3xl">
+                  {banner}
+                </div>
+              </div>
+            </div>
+          ) : landmark ? (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center md:bottom-28">
               <div className="select-none rounded-md border-2 border-[#22302c] bg-[#efece3]/90 px-4 py-1.5 text-center font-serif text-sm italic text-[#22302c] shadow-[3px_3px_0_rgba(34,48,44,0.35)]">
                 {landmark}

@@ -17,7 +17,7 @@ import {
 import { INK } from "./palette";
 import { makeGradientMap } from "./clouds";
 
-const ORBIT_RADIUS = 1.2; // above the cloud shells (1.07–1.13)
+const ORBIT_RADIUS = 1.34; // above the cloud shells (1.20–1.27)
 const PLANE_SCALE = 0.055;
 
 // Tilt (x/z) and speed (rad per frame @60fps) per plane — different axes

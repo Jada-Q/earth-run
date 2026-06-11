@@ -172,7 +172,7 @@ export function buildTrees(landmarks: Landmarks): Trees {
         let dLng = Math.abs(lng - clng);
         if (dLng > 180) dLng = 360 - dLng;
         const d = Math.hypot(lat - clat, dLng * Math.cos((clat * Math.PI) / 180));
-        if (d < 1.5) return true;
+        if (d < 2.5) return true;
       }
       return false;
     };

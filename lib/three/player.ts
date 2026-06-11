@@ -180,10 +180,18 @@ export function buildPlayer(
         q.premultiply(step);
       }
       // Sea check: on open water you sail; jumping puts you on wings.
+      // NOT ships.isSea — that one keeps a wide offshore margin so NPC
+      // boats never hug the coast. The player's boat must appear the
+      // moment your feet are wet, so test right at the coastline (SDF
+      // 0.5 ≈ 127).
       let atSea = false;
       if (mask) {
         const ll = vec3ToLatLng(up);
-        atSea = isSea(mask, ll.lat, ll.lng);
+        const u = (ll.lng + 180) / 360;
+        const v = 1 - (ll.lat + 90) / 180;
+        const px = Math.min(mask.w - 1, Math.max(0, Math.round(u * mask.w)));
+        const py = Math.min(mask.h - 1, Math.max(0, Math.round(v * mask.h)));
+        atSea = mask.data[(py * mask.w + px) * 4] < 126;
       }
 
       // Terrain pitch under the runner: sample ground ahead vs behind.
