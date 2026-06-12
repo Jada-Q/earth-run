@@ -40,4 +40,9 @@ Part of [Jada-Q](https://github.com/Jada-Q)'s ambient world series —
 sister pieces: [Quake Globe](https://github.com/Jada-Q/quake-globe),
 Tide Pixels, Sky Traffic, Bay Ships, Subway Pulse.
 
-MIT.
+## Data credits
+
+- Terrain heightmap: [three-globe](https://github.com/vasturiano/three-globe) (MIT) — SRTM-derived, NASA public domain
+- Coastlines / land mask: [Natural Earth](https://www.naturalearthdata.com/) (public domain) via [world-atlas](https://www.npmjs.com/package/world-atlas) (ISC)
+
+MIT (code).
