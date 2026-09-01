@@ -15,6 +15,7 @@ import {
   MeshToonMaterial,
 } from "three";
 import { INK } from "./palette";
+import { wobbleGeo } from "./wobble-geo";
 import { makeGradientMap } from "./clouds";
 
 export type RunnerPose = "idle" | "run" | "jump" | "chop";
@@ -83,7 +84,9 @@ export function buildRunner(outfit: Outfit = OUTFITS[0]): Runner {
     m.position.set(x, y, z);
     parent.add(m);
     if (hull) {
-      const hm = new Mesh(geo, inkHull);
+      const wGeo = wobbleGeo(geo);
+      geos.push(wGeo as BoxGeometry);
+      const hm = new Mesh(wGeo, inkHull);
       hm.position.set(x, y, z);
       hm.scale.setScalar(HULL);
       parent.add(hm);

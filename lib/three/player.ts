@@ -20,6 +20,7 @@ import { buildRunner, type Outfit, type Runner, type RunnerPose } from "./runner
 import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 import { loadLandMask, isSea, type LandMask } from "./ships";
 import { INK } from "./palette";
+import { wobbleGeo } from "./wobble-geo";
 import { makeGradientMap } from "./clouds";
 
 const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
@@ -91,9 +92,11 @@ function vehicleParts() {
     const m = new Mesh(geo, mat);
     m.position.set(x, y, z);
     parent.add(m);
-    const hull = new Mesh(geo, inkHull);
+    const wGeo = wobbleGeo(geo);
+    geos.push(wGeo as BoxGeometry);
+    const hull = new Mesh(wGeo, inkHull);
     hull.position.set(x, y, z);
-    hull.scale.setScalar(1.07);
+    hull.scale.setScalar(1.035);
     parent.add(hull);
   };
   const dispose = () => {

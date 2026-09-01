@@ -20,6 +20,7 @@ import {
   Vector3,
 } from "three";
 import { INK } from "./palette";
+import { wobbleGeo } from "./wobble-geo";
 import { makeGradientMap } from "./clouds";
 import { latLngToVec3 } from "./geo";
 
@@ -110,10 +111,12 @@ export function buildLandmarks(): Landmarks {
     m.position.set(x, y, z);
     m.rotation.y = ry;
     parent.add(m);
-    const hull = new Mesh(geo, inkMat);
+    const wGeo = wobbleGeo(geo);
+    disposables.push(wGeo);
+    const hull = new Mesh(wGeo, inkMat);
     hull.position.set(x, y, z);
     hull.rotation.y = ry;
-    hull.scale.setScalar(1.07);
+    hull.scale.setScalar(1.035);
     parent.add(hull);
   };
 
