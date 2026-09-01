@@ -128,9 +128,9 @@ export class EarthRunApp {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.rig = new CameraRig(HOME_VIEW);
 
-    this.sun = new DirectionalLight(0xffffff, 2.2);
+    this.sun = new DirectionalLight("#fff1d6", 2.35); // warm afternoon key
     this.applyLightDir();
-    this.scene.add(this.sun, new AmbientLight(0xffffff, 0.55));
+    this.scene.add(this.sun, new AmbientLight("#dcebf5", 0.6)); // cool sky fill
 
     this.tiltGroup.add(this.spinGroup);
     this.scene.add(this.tiltGroup);
