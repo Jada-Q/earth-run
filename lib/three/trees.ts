@@ -1,12 +1,12 @@
 import { meters } from "./world-scale";
 // Six regional tree silhouettes, batched by species. Placement awaits terrain.
-import { Color, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshToonMaterial, Object3D, Vector3 } from "three";
+import { Color, Group, InstancedMesh, Matrix4, MeshToonMaterial, Object3D, Vector3 } from "three";
 import { makeGradientMap } from "./clouds";
 import { loadLandMask, type LandMask } from "./ships";
 import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 import type { Landmarks } from "./landmarks";
 import { WORLD_STYLE } from "./palette";
-import { TREE_SPECIES, TREE_COLORS, treeCanopy } from "./tree-species";
+import { TREE_SPECIES, TREE_COLORS, treeCanopy, treeWood } from "./tree-species";
 
 const WILD_TREES=1600, CITY_TREES=14, BASE=meters(5);
 const CHOP_REACH_COS=Math.cos(meters(2.5)), TREE_R=Math.cos(meters(.45)), FALL_MS=500;
@@ -30,16 +30,18 @@ export function buildTrees(landmarks:Landmarks):Trees {
   const resources:Array<{dispose():void}>=[];
   const gradientMap=makeGradientMap(4,.76);resources.push(gradientMap);
   const total=WILD_TREES+CITY_TREES*landmarks.anchors.length;
-  const trunkGeo=new CylinderGeometry(.13,.20,1,7);
   const trunkMat=new MeshToonMaterial({color:WORLD_STYLE.bark,gradientMap});
-  const trunks=new InstancedMesh(trunkGeo,trunkMat,total);trunks.count=0;trunks.name='Tree trunks';
-  group.add(trunks);resources.push(trunkGeo,trunkMat,trunks);
+  resources.push(trunkMat);
+  const trunks=TREE_SPECIES.map(species=>{
+    const geo=treeWood(species),mesh=new InstancedMesh(geo,trunkMat,total);
+    mesh.count=0;mesh.name=species+' branches';group.add(mesh);resources.push(geo,mesh);return mesh;
+  });
   const canopies=TREE_SPECIES.map((species,i)=>{
-    const geo=treeCanopy(species),mat=new MeshToonMaterial({color:'#ffffff',gradientMap});
+    const geo=treeCanopy(species),mat=new MeshToonMaterial({color:'#ffffff',gradientMap,vertexColors:true});
     const mesh=new InstancedMesh(geo,mat,total);mesh.count=0;mesh.name=species;
     group.add(mesh);resources.push(geo,mat,mesh);return mesh;
   });
-  const batches=[trunks,...canopies];
+  const batches=[...trunks,...canopies];
   // Falling trees stay inside their standing bounds; no per-frame bounds rebuild.
   const recs:TreeRec[]=[],falls:Array<{idx:number;start:number}>=[];
   let colliderCache:Array<{dir:Vector3;minDot:number}>|null=null,disposed=false;
@@ -52,9 +54,7 @@ export function buildTrees(landmarks:Landmarks):Trees {
     tmp.lookAt(rec.dir.x*2,rec.dir.y*2,rec.dir.z*2);tmp.rotateX(Math.PI/2);tmp.rotateY(rec.yaw);
     tmp.scale.setScalar(s);tmp.updateMatrix();
     canopies[rec.species].setMatrixAt(rec.slot,k>.02?tmp.matrix:zero);
-    const height=rec.s*(k>.02?(rec.species===4?2.1:1)*k:.2);
-    tmp.position.copy(rec.dir).multiplyScalar(ground+height/2);
-    tmp.scale.set(rec.s, height, rec.s);tmp.updateMatrix();trunks.setMatrixAt(i,tmp.matrix);
+    trunks[rec.species].setMatrixAt(rec.slot,k>.02?tmp.matrix:zero);
   }
   function choose(lat:number,city?:string) {
     const r=rng();
@@ -76,7 +76,7 @@ export function buildTrees(landmarks:Landmarks):Trees {
     const species=choose(lat,city),mesh=canopies[species];
     const rec:TreeRec={dir:pos.clone(),s:BASE*(.7+rng()*.65),species,slot:mesh.count++,yaw:rng()*Math.PI*2,alive:true};
     const color=new Color(TREE_COLORS[species]);color.multiplyScalar(.90+rng()*.18);mesh.setColorAt(rec.slot,color);
-    recs.push(rec);trunks.count=recs.length;writeTree(recs.length-1,rec,1);return true;
+    recs.push(rec);trunks[species].count=mesh.count;writeTree(recs.length-1,rec,1);return true;
   }
   void(async()=>{
     const [mask]=await Promise.all([loadLandMask(),ensureElevationLoaded()]);

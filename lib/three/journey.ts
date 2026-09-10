@@ -1,6 +1,6 @@
 import type { DiscoveryHud } from "./tokyo-discovery";
-import { treeCanopy } from "./tree-species";
-import { BoxGeometry, CylinderGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, TorusGeometry, Vector3 } from "three";
+import { treeCanopy, treeWood } from "./tree-species";
+import { BoxGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, TorusGeometry, Vector3 } from "three";
 import type { Landmarks } from "./landmarks";
 import { groundHeightAt, groundNormalAt } from "./elevation";
 import { meters, LANDMARK_HEIGHT_M } from "./world-scale";
@@ -36,15 +36,16 @@ export function buildJourney(landmarks: Landmarks) {
   const poleGeo = new BoxGeometry(meters(.15), meters(2.3), meters(.15));
   const signGeo = new BoxGeometry(meters(.2), meters(.75), meters(1.6));
   const canopyGeos = ["blossom", "broadleaf", "palm"].map(kind => {
-    const geo = treeCanopy(kind as "blossom" | "broadleaf" | "palm");
+    const geo = treeCanopy(kind as "blossom" | "broadleaf" | "palm", true);
     geo.scale(meters(3), meters(3), meters(3)); return geo;
   });
   const canopyGeo = canopyGeos[0];
-  const leaf = new MeshStandardMaterial({ color: "#d7ada9", roughness: 1 });
-  const trunkGeo = new CylinderGeometry(meters(.15), meters(.24), meters(4), 7);
+  const leaf = new MeshStandardMaterial({ color: "#f0c1cc", roughness: 1, vertexColors: true, emissive: "#f0c1cc", emissiveIntensity: .12 });
+  const woodGeos = (["blossom", "broadleaf", "palm"] as const).map(kind => treeWood(kind).scale(meters(3), meters(3), meters(3)));
+  const trunkGeo = woodGeos[0];
   const bark = new MeshStandardMaterial({ color: "#86765c", roughness: 1 });
   const planted = Array.from({ length: 8 }, () => {
-    const tree = new Group(); const trunk = new Mesh(trunkGeo, bark); trunk.position.y = meters(2);
+    const tree = new Group(); const trunk = new Mesh(trunkGeo, bark); trunk.position.y = 0;
     tree.add(trunk, new Mesh(canopyGeo, leaf)); group.add(tree); return tree;
   });
   const treeColliders = planted.map(() => ({ dir: new Vector3(), minDot: Math.cos(meters(.5)) }));
@@ -64,8 +65,9 @@ export function buildJourney(landmarks: Landmarks) {
     const index = landmarks.anchors.findIndex(a => a.key === next);
     if (index < 0) return;
     key = next; stage = "landmark";
-    leaf.color.set(next === "tokyo" ? "#d7ada9" : "#93ac80");
-    planted.forEach(tree => { (tree.children[1] as Mesh).geometry = canopyGeos[next === "tokyo" ? 0 : ["dubai", "la"].includes(next) ? 2 : 1]; });
+    leaf.color.set(next === "tokyo" ? "#f0c1cc" : "#93ac80");
+    leaf.emissive.copy(leaf.color);
+    planted.forEach(tree => { const species = next === "tokyo" ? 0 : ["dubai", "la"].includes(next) ? 2 : 1; (tree.children[1] as Mesh).geometry = canopyGeos[species]; (tree.children[0] as Mesh).geometry = woodGeos[species]; });
     center.copy(landmarks.colliders[index].dir);
     west.crossVectors(radial, center).normalize().negate();
     const radius = Math.acos(landmarks.colliders[index].minDot);
@@ -106,6 +108,6 @@ export function buildJourney(landmarks: Landmarks) {
     get height() { return meters(LANDMARK_HEIGHT_M[key]); },
     target() { return stage === "landmark" ? photo : departure; },
     stamp() { stage = "departure"; update(); },
-    dispose() { [pathGeo, ringGeo, poleGeo, signGeo, gold, stone, teal, ...canopyGeos, trunkGeo, leaf, bark].forEach(r => r.dispose()); },
+    dispose() { [pathGeo, ringGeo, poleGeo, signGeo, gold, stone, teal, ...canopyGeos, ...woodGeos, leaf, bark].forEach(r => r.dispose()); },
   };
 }
