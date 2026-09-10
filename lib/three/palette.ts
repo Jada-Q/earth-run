@@ -14,6 +14,27 @@ export const INK = "#22302c";
 export const ACCENT = "#e8ab3c"; // intro BEGIN button ONLY
 export const CLOUD = "#f4f1e8";
 
+/** Shared matte-diorama colors: quiet terrain, ivory clouds, sage foliage.
+ * Landmark signature colors and the gameplay accent remain distinct. */
+export const WORLD_STYLE = {
+  land: "#d6ddbd",
+  vegetation: "#a1b58b",
+  sea: "#79afa8",
+  shallows: "#a2c8b9",
+  sand: "#e5dec5",
+  rock: "#a6ad98",
+  snow: "#f1efdf",
+  coast: "#8eaa96",
+  silhouette: "#60877e",
+  cloud: "#f4f1e8",
+  conifer: "#6d9077",
+  broadleaf: "#93ac80",
+  bark: "#a08c73",
+  ink: "#53685e",
+  paper: "#eee9d9",
+  teal: "#597d80",
+} as const;
+
 /** Magnitude → color, staying inside the cool/neutral palette. Severity is
  *  carried by darkness + marker size + animation intensity, NOT warmth —
  *  yellow/orange/red would compete with the single accent. */
@@ -46,9 +67,9 @@ export function defaultToonParams(): ToonParams {
   return {
     steps: 3,
     shadeMul: 0.88,
-    inkWidth: 0.018,
-    inkStrength: 0.85,
-    outlineWidth: 0.012,
+    inkWidth: 0.005,
+    inkStrength: 0.26,
+    outlineWidth: 0.0015,
     rotationSpeed: 0.1,
     cloudSpeed: 1.0,
     lightAzimuth: -35,

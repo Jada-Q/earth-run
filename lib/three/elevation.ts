@@ -40,7 +40,7 @@ export function ensureElevationLoaded(): Promise<void> {
 /** Terrain height (world units above the unit sphere) at a surface
  *  direction. Bilinear-interpolated — nearest sampling gave the runner a
  *  staircase ride across texel boundaries. */
-export function groundHeightAt(up: Vector3): number {
+function sampledHeightAt(up: Vector3): number {
   if (!map) return 0;
   const lat = (Math.asin(Math.max(-1, Math.min(1, up.y))) * 180) / Math.PI;
   const lng = (Math.atan2(-up.z, up.x) * 180) / Math.PI;
@@ -61,4 +61,46 @@ export function groundHeightAt(up: Vector3): number {
     at(x0, y0 + 1) * (1 - tx) * ty +
     at(x0 + 1, y0 + 1) * tx * ty;
   return (h / 255) * TERRAIN_SCALE;
+}
+
+
+// Match the rendered 256 × 192 sphere triangles, including their planar
+// interpolation across baked city plateaus. Sampling the texture directly
+// can place a pedestrian camera underneath a coarse terrain triangle.
+const terrainVertices = new Map<number, Vector3>();
+const normal = new Vector3(), edge = new Vector3();
+export function groundHeightAt(up: Vector3): number {
+  if (!map) return 0;
+  const cols = 256, rows = 192;
+  const u = ((Math.atan2(-up.z, up.x) / (2 * Math.PI) + .5) % 1 + 1) % 1;
+  const v = Math.acos(Math.max(-1, Math.min(1, up.y))) / Math.PI;
+  const x = Math.min(cols - 1, Math.floor(u * cols));
+  const y = Math.min(rows - 1, Math.floor(v * rows));
+  const tx = u * cols - x, ty = v * rows - y;
+  const vertex = (ix: number, iy: number): Vector3 => {
+    const key = iy * (cols + 1) + ix;
+    let p = terrainVertices.get(key);
+    if (!p) {
+      const lat = Math.PI / 2 - iy / rows * Math.PI;
+      const lng = ix / cols * Math.PI * 2 - Math.PI;
+      p = new Vector3(Math.cos(lat) * Math.cos(lng), Math.sin(lat), -Math.cos(lat) * Math.sin(lng));
+      p.multiplyScalar(1 + sampledHeightAt(p)); terrainVertices.set(key, p);
+    }
+    return p;
+  };
+  const a = vertex(x, y), b = tx >= ty ? vertex(x + 1, y) : vertex(x, y + 1), c = vertex(x + 1, y + 1);
+  normal.subVectors(b, a).cross(edge.subVectors(c, a));
+  const denominator = normal.dot(up);
+  return Math.abs(denominator) > 1e-14 ? normal.dot(a) / denominator - 1 : sampledHeightAt(up);
+}
+
+
+/** Surface normal of the same rendered triangle, for ground-aligned paving. */
+export function groundNormalAt(up: Vector3, out: Vector3): Vector3 {
+  if (!map) return out.copy(up);
+  groundHeightAt(up);
+  if (normal.lengthSq() < 1e-20) return out.copy(up);
+  out.copy(normal).normalize();
+  if (out.dot(up) < 0) out.negate();
+  return out;
 }

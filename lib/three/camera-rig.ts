@@ -61,7 +61,7 @@ export class CameraRig {
   constructor(region: ViewPreset) {
     // Tight near plane: at street scale, 0.05 worth of near-clip swallows
     // whole props when the camera squeezes between objects.
-    this.camera = new PerspectiveCamera(CAMERA_FOV_DEG, 1, 0.008, 50);
+    this.camera = new PerspectiveCamera(CAMERA_FOV_DEG, 1, 0.000008, 10);
     this.lambda = region.lambda;
     this.phi = region.phi;
     this.scale = region.scale;

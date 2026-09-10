@@ -14,7 +14,7 @@ import {
   Object3D,
   Vector3,
 } from "three";
-import { INK } from "./palette";
+import { WORLD_STYLE } from "./palette";
 
 const FLIGHT_RADIUS = 1.045; // under the cloud shells
 const BIRD_SIZE = 0.016;
@@ -55,7 +55,7 @@ export interface Birds {
 export function buildBirds(): Birds {
   const root = new Group();
   const geo = chevronGeometry();
-  const mat = new MeshBasicMaterial({ color: INK, side: DoubleSide });
+  const mat = new MeshBasicMaterial({ color: WORLD_STYLE.ink, side: DoubleSide });
 
   const flocks: Flock[] = [];
   for (const cfg of FLOCKS) {

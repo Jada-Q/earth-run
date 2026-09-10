@@ -1,19 +1,18 @@
+import { fitPhysicalDimension } from "./world-scale";
+import { buildRunner, type Runner } from "./runner";
+import { buildNaturalDog } from "./natural-dog";
+import { organicKit } from "./organic-model";
 // City residents — chibi people strolling small loops around each city,
-// plus a cat or dog trotting a tighter, faster loop. Pure box assemblies
-// in the cool palette; animation is a waddle-bob, tails wag.
+// plus a cat or dog trotting a tighter, faster loop. Simplified smooth
+// anatomy shares the traveler style while keeping resident geometry small.
 
 import {
-  BackSide,
-  BoxGeometry,
   Group,
-  Mesh,
-  MeshBasicMaterial,
-  MeshToonMaterial,
   Matrix4,
   Vector3,
 } from "three";
-import { INK } from "./palette";
-import { makeGradientMap } from "./clouds";
+import { WORLD_STYLE } from "./palette";
+import { groundHeightAt } from "./elevation";
 import type { Landmarks } from "./landmarks";
 
 const SHIRTS = ["#2e5d66", "#3e7d58", "#9fbfa8", "#efe7cf"];
@@ -27,6 +26,7 @@ interface Walker {
   speed: number; // rad/s around the loop (sign = direction)
   angle: number;
   bobFreq: number;
+  limbs: Group[];
   tail: Group | null;
 }
 
@@ -40,89 +40,44 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
   const root = new Group();
   const disposables: Array<{ dispose(): void }> = [];
 
-  const inkMat = new MeshBasicMaterial({ color: INK, side: BackSide });
-  disposables.push(inkMat);
-  const matOf = (() => {
-    const cache = new Map<string, MeshToonMaterial>();
-    return (hex: string) => {
-      let m = cache.get(hex);
-      if (!m) {
-        m = new MeshToonMaterial({
-          color: hex,
-          gradientMap: makeGradientMap(3, 0.78),
-        });
-        cache.set(hex, m);
-        disposables.push(m, { dispose: () => m!.gradientMap?.dispose() });
-      }
-      return m;
-    };
-  })();
-
-  const prim = (
-    parent: Group,
-    w: number,
-    h: number,
-    d: number,
-    hex: string,
-    x: number,
-    y: number,
-    z: number,
-  ) => {
-    const geo = new BoxGeometry(w, h, d);
-    disposables.push(geo);
-    const m = new Mesh(geo, matOf(hex));
-    m.position.set(x, y, z);
-    parent.add(m);
-    const hull = new Mesh(geo, inkMat);
-    hull.position.set(x, y, z);
-    hull.scale.setScalar(1.08);
-    parent.add(hull);
-  };
-
   let seed = 24601;
   const rng = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
 
-  // Big-head resident: stub legs, squat body, oversized head with a hair
-  // chunk. Faces +X, origin at soles. ~60% of the runner.
-  const HAIR = ["#3a4d48", "#d2693e", "#c4798c", "#8a7d62"];
-  const buildPerson = (shirt: string): Group => {
-    const g = new Group();
-    prim(g, 0.07, 0.08, 0.07, "#eecfa4", 0, 0.04, -0.06);
-    prim(g, 0.07, 0.08, 0.07, "#eecfa4", 0, 0.04, 0.06);
-    prim(g, 0.24, 0.18, 0.17, shirt, 0, 0.17, 0);
-    prim(g, 0.26, 0.24, 0.25, "#eecfa4", 0, 0.38, 0);
-    prim(g, 0.27, 0.06, 0.26, HAIR[Math.floor(rng() * HAIR.length)], 0, 0.52, 0);
-    g.scale.setScalar(0.032);
-    return g;
+  const residents = new Map<Group, Runner>();
+  const buildPerson = (shirt: string): { g: Group; limbs: Group[] } => {
+    const person=buildRunner({jacket:shirt,crest:WORLD_STYLE.bark}, "resident");
+    // Background residents use the same physical height as the player.
+    disposables.push(person);
+    residents.set(person.group,person);
+    return {g:person.group,limbs:[]};
   };
-
-  // Critter: long body, head forward, tail behind (wags). Cat small &
-  // tail-up, dog bigger & tail-back.
   const buildCritter = (kind: "cat" | "dog"): { g: Group; tail: Group } => {
-    const g = new Group();
-    const hex = kind === "cat" ? "#3a4d48" : "#c9b896";
-    const s = kind === "cat" ? 0.75 : 1;
-    prim(g, 0.3 * s, 0.12 * s, 0.12 * s, hex, 0, 0.1 * s, 0);
-    prim(g, 0.12 * s, 0.11 * s, 0.11 * s, hex, 0.2 * s, 0.15 * s, 0);
-    // ears
-    prim(g, 0.03 * s, 0.05 * s, 0.03 * s, hex, 0.22 * s, 0.23 * s, 0.03 * s);
-    prim(g, 0.03 * s, 0.05 * s, 0.03 * s, hex, 0.22 * s, 0.23 * s, -0.03 * s);
-    const tail = new Group();
-    tail.position.set(-0.16 * s, 0.13 * s, 0);
-    prim(tail, 0.035 * s, 0.14 * s, 0.035 * s, hex, 0, 0.06 * s, 0);
-    if (kind === "dog") tail.rotation.z = 0.9; // wagging back, not up
-    g.add(tail);
-    g.scale.setScalar(0.028);
-    return { g, tail };
+    if(kind==="dog") {
+      const dog=buildNaturalDog("resident");disposables.push(dog);fitPhysicalDimension(dog.body,"y",.75);
+      return {g:dog.body,tail:dog.tail};
+    }
+    const g=new Group(),kit=organicKit("resident");disposables.push(kit);
+    const coat="#70756b";
+    kit.oval(g,coat,0,.22,0,.22,.10,.085);
+    kit.oval(g,coat,.20,.32,0,.09,.095,.075);
+    for(const z of [-.055,.055]) {
+      kit.oval(g,coat,.185,.415,z,.023,.060,.020);
+      kit.oval(g,"#d3bf81",.275,.335,z*.7,.010,.012,.007,false);
+    }
+    for(const x of [-.15,.14])for(const z of [-.055,.055])kit.oval(g,coat,x,.11,z,.026,.105,.025);
+    kit.oval(g,WORLD_STYLE.paper,.277,.29,0,.032,.023,.039);
+    const tail=new Group();tail.position.set(-.18,.25,0);g.add(tail);
+    kit.curve(tail,coat,[[0,0,0],[-.08,.09,0],[-.08,.24,0],[-.04,.27,0]],.023);
+    fitPhysicalDimension(g,"y",.45);return {g,tail};
   };
 
   const walkers: Walker[] = [];
   landmarks.anchors.forEach((a, idx) => {
     for (let p = 0; p < PEOPLE_PER_CITY; p++) {
-      const g = buildPerson(SHIRTS[Math.floor(rng() * SHIRTS.length)]);
+      const { g, limbs } = buildPerson(SHIRTS[Math.floor(rng() * SHIRTS.length)]);
       root.add(g);
       walkers.push({
         group: g,
@@ -133,6 +88,7 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
         angle: rng() * Math.PI * 2,
         bobFreq: 9 + rng() * 4,
         tail: null,
+        limbs,
       });
     }
     const kind = rng() > 0.5 ? "cat" : "dog";
@@ -146,6 +102,7 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
       angle: rng() * Math.PI * 2,
       bobFreq: 16,
       tail,
+      limbs: [],
     });
   });
 
@@ -178,8 +135,12 @@ export function buildNpcs(landmarks: Landmarks): Npcs {
         right.copy(fwd).cross(pos);
         m4.makeBasis(fwd, pos, right);
         w.group.quaternion.setFromRotationMatrix(m4);
-        const bob = Math.abs(Math.sin(nowMs * 0.001 * w.bobFreq)) * 0.0012;
-        w.group.position.copy(pos).multiplyScalar(1 + bob);
+        const bob = Math.abs(Math.sin(nowMs * 0.001 * w.bobFreq)) * 0.000006;
+        w.group.position.copy(pos).multiplyScalar(1 + groundHeightAt(pos) + bob);
+        residents.get(w.group)?.setPose("run", nowMs*.001*w.bobFreq);
+        w.limbs.forEach((limb, i) => {
+          limb.rotation.z = Math.sin(nowMs * 0.001 * w.bobFreq) * 0.45 * (i === 0 || i === 3 ? 1 : -1);
+        });
         if (w.tail) w.tail.rotation.x = Math.sin(nowMs * 0.012) * 0.5;
       }
     },

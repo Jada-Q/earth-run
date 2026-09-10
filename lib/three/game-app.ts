@@ -1,3 +1,8 @@
+import { buildTokyoDiscovery } from "./tokyo-discovery";
+import { buildJourney, DESTINATIONS, type JourneyHud } from "./journey";
+import { vec3ToLatLng } from "./geo";
+import { groundHeightAt } from "./elevation";
+import { meters } from "./world-scale";
 // EarthRunApp — imperative three.js orchestrator for the tiny-planet racing
 // game. Step-1 shape: the living toon planet (clouds, planes, ships, birds,
 // whale, satellite, day/night) with a free orbit camera; the runner,
@@ -55,12 +60,12 @@ const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
 const ENTER_MS = 900;
 const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
-const CAM_DIST = 0.21; // behind the (now pedestrian-sized) runner
-const CAM_HEIGHT = 0.065; // low — street-level feel, horizon high in frame
+const CAM_DIST = meters(9); // behind the (now pedestrian-sized) runner
+const CAM_HEIGHT = meters(4); // low — street-level feel, horizon high in frame
 // In town the camera rises and looks down over the rooftops — a ground
 // level camera jammed between cottages/poles clips through everything.
-const CAM_HEIGHT_CITY = 0.16;
-const CAM_DIST_CITY = 0.27;
+const CAM_HEIGHT_CITY = meters(5);
+const CAM_DIST_CITY = meters(12);
 const CITY_CAM_COS = Math.cos((3.2 * Math.PI) / 180);
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
@@ -100,6 +105,17 @@ export class EarthRunApp {
   private outfit: Outfit | undefined;
   private input: GameInput | null = null;
   private race: Race;
+  private journey: ReturnType<typeof buildJourney>;
+  private discovery: ReturnType<typeof buildTokyoDiscovery>;
+  private photoMode: "portrait" | "landmark" | null = null;
+  private photoTilt = 0;
+  private following = false;
+  private scenic = false;
+  private paused = false;
+  private manualForward = 0;
+  private manualTurn = 0;
+  private viewYaw = 0;
+  private viewZoom = 1;
   private landmarks: Landmarks;
   private npcs: Npcs;
   private streetProps: StreetProps;
@@ -128,9 +144,9 @@ export class EarthRunApp {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.rig = new CameraRig(HOME_VIEW);
 
-    this.sun = new DirectionalLight("#fff1d6", 2.35); // warm afternoon key
+    this.sun = new DirectionalLight("#fff3df", 1.8); // soft studio-like afternoon key
     this.applyLightDir();
-    this.scene.add(this.sun, new AmbientLight("#dcebf5", 0.6)); // cool sky fill
+    this.scene.add(this.sun, new AmbientLight("#e5eee9", 0.8)); // neutral sage sky fill
 
     this.tiltGroup.add(this.spinGroup);
     this.scene.add(this.tiltGroup);
@@ -155,6 +171,13 @@ export class EarthRunApp {
     // Landmarks + residents live in the planet's frame too.
     this.landmarks = buildLandmarks();
     this.spinGroup.add(this.landmarks.group);
+    this.journey = buildJourney(this.landmarks);
+    this.spinGroup.add(this.journey.group);
+    this.discovery = buildTokyoDiscovery();
+    this.spinGroup.add(this.discovery.group);
+    this.discovery.group.visible = false;
+    this.journey.group.visible = false;
+    this.race.group.visible = false;
     this.npcs = buildNpcs(this.landmarks);
     this.spinGroup.add(this.npcs.group);
     this.streetProps = buildStreetProps(this.landmarks);
@@ -167,10 +190,12 @@ export class EarthRunApp {
       new ConeGeometry(0.007, 0.02, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
     );
+    this.guideArrow.scale.setScalar(.02);
     this.guideArrow.visible = false;
     this.scene.add(this.guideArrow);
 
     this.introLetters = buildIntroLetters();
+    this.introLetters.group.visible = false;
     this.scene.add(this.introLetters.group);
 
     this.detachControls = attachControls({
@@ -238,14 +263,104 @@ export class EarthRunApp {
     return regionAt(this.player.up);
   }
 
-  /** Landmark plaque: name of the monument you're standing near (≤3°). */
+  /** Match the nearest actual display footprint, not overlapping city checkpoints. */
   nearbyLandmark(): string | null {
     if (!this.player) return null;
-    const NEAR = Math.cos((3 * Math.PI) / 180);
-    for (const a of this.landmarks.anchors) {
-      if (this.player.up.dot(a.dir) > NEAR) return a.name;
-    }
-    return null;
+    let nearest = Infinity, name: string | null = null;
+    this.landmarks.anchors.forEach((a, i) => {
+      const c = this.landmarks.colliders[i];
+      const edge = Math.acos(Math.min(1, this.player!.up.dot(c.dir))) - Math.acos(c.minDot);
+      if (edge < meters(18) && edge < nearest) { nearest = edge; name = a.name; }
+    });
+    return name;
+  }
+
+  journeyHud(): JourneyHud | null {
+    if (!this.player || this.mode !== "play") return null;
+    const city = DESTINATIONS.find(c => c.key === this.journey.key)!;
+    const distance = Math.acos(Math.min(1, this.player.up.dot(this.navigationTarget()))) / meters(1);
+    return { city: city.label, title: city.title, key: city.key, stage: this.journey.stage,
+      distance: Math.round(distance), ready: distance < 4 && !this.player.isFlying(),
+      following: this.following, scenic: this.scenic, discovery: this.discovery.hud() };
+  }
+  private navigationTarget(): Vector3 { return this.discovery.active() ? this.discovery.target() : this.journey.target(); }
+  investigateDiscovery(): void { this.discovery.investigate(); this.following = true; this.scenic = false; }
+  skipDiscovery(): void { this.discovery.skip(); this.following = true; this.scenic = false; }
+  interactDiscovery(): "request" | "found" | "reward" | null {
+    if (!this.player || this.player.isFlying()) return null;
+    const result = this.discovery.interact(this.player.up); this.following = false;
+    if (result === "reward") this.companion?.setScarf(true);
+    return result;
+  }
+  openPhoto(): boolean {
+    if (!this.player || this.discovery.active() || this.journey.stage !== "landmark" || !this.journeyHud()?.ready) return false;
+    this.setPhotoView("landmark"); this.following = false; return true;
+  }
+  setPhotoView(view: "portrait" | "landmark"): void {
+    this.photoMode = view; this.scenic = view === "landmark";
+    this.viewYaw = view === "portrait" ? Math.PI : 0; this.viewZoom = 1; this.photoTilt = 0;
+  }
+  tiltPhoto(delta: number): void { this.photoTilt = Math.max(-.5, Math.min(.5, this.photoTilt + delta)); }
+  closePhoto(): void { this.photoMode = null; this.scenic = false; this.viewYaw = 0; this.viewZoom = 1; this.photoTilt = 0; }
+  photoComposition(): { person: boolean; dog: boolean; landmark: boolean } {
+    const inFrame = (object: Group | undefined | null) => {
+      if (!object) return false;
+      object.updateWorldMatrix(true, true);
+      const cam = this.rig.camera; cam.updateMatrixWorld(true);
+      let fits = true, count = 0;
+      object.traverseVisible(child => {
+        if (!(child instanceof Mesh) || !fits) return;
+        child.geometry.computeBoundingBox(); const box = child.geometry.boundingBox;
+        if (!box) return; count++;
+        for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+          const p = new Vector3(x, y, z).applyMatrix4(child.matrixWorld).project(cam);
+          if (Math.abs(p.x) > .96 || Math.abs(p.y) > .96 || p.z < -1 || p.z > 1) fits = false;
+        }
+      });
+      return fits && count > 0;
+    };
+    return { person: inFrame(this.player?.group), dog: inFrame(this.companion?.group),
+      landmark: inFrame(this.landmarks.group.getObjectByName(`landmark:${this.journey.key}`) as Group | undefined) };
+  }
+  followDog(): void { if (this.discovery.hud()?.state === "noticed") this.discovery.skip(); this.following = !this.following; this.scenic = false; }
+  setPaused(value: boolean): void { this.paused = value; this.manualForward = 0; this.manualTurn = 0; }
+  moveControl(forward: number, turn: number): void { this.manualForward = forward; this.manualTurn = turn; }
+  cameraControl(turn: number, zoom: number): void {
+    this.viewYaw += turn; this.viewZoom = Math.max(.65, Math.min(2.5, this.viewZoom + zoom));
+  }
+  toggleScenic(): void { this.scenic = !this.scenic; this.following = false; }
+  stampVisit(): boolean {
+    if (!this.journeyHud()?.ready || this.discovery.active() || this.journey.stage !== "landmark") return false;
+    this.journey.stamp(); this.following = false; return true;
+  }
+  capturePostcard(): string {
+    this.renderer.render(this.scene, this.rig.camera);
+    const output = document.createElement("canvas");
+    output.width = this.canvas.width; output.height = this.canvas.height;
+    const context = output.getContext("2d");
+    if (!context) throw new Error("Postcard canvas unavailable");
+    const sky = context.createLinearGradient(0, 0, 0, output.height);
+    sky.addColorStop(0, "#9fc9c8"); sky.addColorStop(1, "#e6eddb");
+    context.fillStyle = sky; context.fillRect(0, 0, output.width, output.height);
+    context.drawImage(this.canvas, 0, 0);
+    return output.toDataURL("image/png");
+  }
+  travelTo(key: string): void {
+    if (!this.player || !DESTINATIONS.some(c => c.key === key)) return;
+    this.journey.configure(key); this.spawnJourney(); this.closePhoto();
+    this.following = false; this.viewYaw = 0; this.viewZoom = 1;
+  }
+  private spawnJourney(): void {
+    if (this.player) { this.scene.remove(this.player.group); this.player.dispose(); }
+    if (this.companion) { this.scene.remove(this.companion.group); this.companion.dispose(); }
+    const pos = vec3ToLatLng(this.journey.spawn);
+    this.player = buildPlayer(pos.lat, pos.lng, this.outfit);
+    this.scene.add(this.player.group);
+    this.companion = buildCompanion(); this.scene.add(this.companion.group);
+    this.companion.setScarf(this.discovery.completed);
+    this.discovery.configure(this.journey.key, this.journey.departure, this.journey.photo);
+    this.journey.group.visible = true;
+    this.rig.camera.position.copy(this.player.group.position).addScaledVector(this.player.up, meters(5)).addScaledVector(this.player.forward, -meters(12));
   }
 
   /** Dev teleport — rebuild the runner at given coords (debug pane use). */
@@ -323,10 +438,7 @@ export class EarthRunApp {
         this.tiltGroup.rotation.x = 0;
         this.spinGroup.rotation.y = 0;
         this.tiltGroup.position.y = 0;
-        this.player = buildPlayer(SPAWN.lat, SPAWN.lng, this.outfit);
-        this.scene.add(this.player.group);
-        this.companion = buildCompanion();
-        this.scene.add(this.companion.group);
+        this.spawnJourney();
         this.input = attachInput(this.canvas);
         cam.fov = PLAY_FOV;
         cam.updateProjectionMatrix();
@@ -334,13 +446,37 @@ export class EarthRunApp {
       }
     } else if (this.player && this.input) {
       const frame = this.input.read();
+      frame.forward += this.manualForward; frame.turn += this.manualTurn;
+      if (frame.forward || frame.turn) this.following = false;
+      if (this.discovery.update(this.player.up)) this.following = false;
+      const target = this.navigationTarget();
+      const desired = target.clone().addScaledVector(this.player.up, -target.dot(this.player.up)).normalize();
+      const remaining = Math.acos(Math.min(1, target.dot(this.player.up)));
+      if (this.following && !this.paused && !this.scenic) {
+        if (remaining < meters(2.5)) this.following = false;
+        else {
+          const angle = Math.atan2(this.player.up.dot(this.player.forward.clone().cross(desired)), this.player.forward.dot(desired));
+          frame.turn = Math.max(-1, Math.min(1, angle * 2));
+          frame.forward = Math.abs(angle) < .5 ? .65 : 0;
+        }
+      }
+      if (this.paused || this.scenic || this.photoMode) { frame.forward = 0; frame.turn = 0; frame.jump = false; frame.jumpHeld = false; }
+      frame.chop = false;
+      this.journey.update();
+      for (const child of this.landmarks.group.children) {
+        if (child.name.startsWith("landmark:")) {
+          const dir = child.position.clone().normalize();
+          child.position.copy(dir).multiplyScalar(1 + groundHeightAt(dir));
+        }
+      }
       // The clock starts the first time you move.
-      if (frame.forward !== 0 || frame.turn !== 0) this.race.start(now);
+      // Travel exploration does not start the optional historical race.
       if (frame.chop && this.trees.tryChop(this.player.up)) {
         this.player.chop();
       }
       const colliders = [
         ...this.landmarks.colliders,
+        ...this.journey.colliders,
         ...this.trees.colliders(),
       ];
       this.player.update(dt, frame, colliders);
@@ -350,16 +486,18 @@ export class EarthRunApp {
         this.player.up,
         this.player.forward,
         colliders,
+        this.following ? desired : undefined,
+        this.discovery.hud()?.state === "noticed" ? (Math.sin(now * .0015) > 0 ? "sniff" : "lookBack") : undefined,
       );
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
-      const t = this.race.targetTangent(this.player.up, this.guideDir);
+      const t = this.guideDir.copy(desired);
       if (t) {
         this.guideArrow.visible = true;
         this.guideArrow.position
           .copy(this.player.group.position)
-          .addScaledVector(this.player.up, 0.006)
-          .addScaledVector(t, 0.075);
+          .addScaledVector(this.player.up, meters(0.3))
+          .addScaledVector(t, meters(5));
         this.guideQuat.setFromUnitVectors(this.guideArrow.up, t);
         this.guideArrow.quaternion.copy(this.guideQuat);
       } else {
@@ -368,7 +506,7 @@ export class EarthRunApp {
       // Follow cam: behind and above the runner, "up" = the runner's up so
       // the horizon stays level across the whole sphere (poles included).
       const up = this.player.up;
-      const fwd = this.player.forward;
+      const fwd = this.player.forward.clone().applyAxisAngle(up, this.viewYaw);
       // In town the camera rises over the rooftops — a ground-level cam
       // jammed between cottages/poles clips through everything.
       let cityness = 0;
@@ -379,7 +517,7 @@ export class EarthRunApp {
         }
       }
       const camH = CAM_HEIGHT + (CAM_HEIGHT_CITY - CAM_HEIGHT) * cityness;
-      const camD = CAM_DIST + (CAM_DIST_CITY - CAM_DIST) * cityness;
+      const camD = (CAM_DIST + (CAM_DIST_CITY - CAM_DIST) * cityness) * this.viewZoom;
       // Based on the player's actual radial position so the camera rides
       // up and over mountain terrain with them.
       this.camTarget
@@ -387,7 +525,7 @@ export class EarthRunApp {
         .addScaledVector(up, camH)
         .addScaledVector(fwd, -camD);
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
-      cam.position.lerp(this.camTarget, k);
+      if (!this.scenic && !this.photoMode) cam.position.lerp(this.camTarget, k);
       // The camera itself respects building columns: push its ground
       // projection out of any keep-out disc.
       const camR = cam.position.length();
@@ -409,7 +547,23 @@ export class EarthRunApp {
       cam.up.copy(up);
       // Look well past the runner so the horizon sits high in frame
       // (street-level feel, like the reference).
-      this.camLook.copy(this.player.group.position).addScaledVector(fwd, 0.3);
+      this.camLook.copy(this.player.group.position).addScaledVector(up, meters(1)).addScaledVector(fwd, meters(5));
+      if (this.scenic) {
+        const center = this.journey.center;
+        const base = center.clone().multiplyScalar(1 + groundHeightAt(center));
+        const west = new Vector3(0, 1, 0).cross(center).normalize().negate().applyAxisAngle(center, this.viewYaw);
+        this.camLook.copy(base).addScaledVector(center, this.journey.height * (.43 + this.photoTilt));
+        this.camTarget.copy(base).addScaledVector(center, this.journey.height * .55)
+          .addScaledVector(west, Math.max(meters(50), this.journey.height * 2.1) * this.viewZoom);
+        cam.position.lerp(this.camTarget, k); cam.up.copy(center);
+      }
+      if (this.photoMode === "portrait") {
+        const base = this.player.group.position;
+        const axis = this.player.forward.clone().applyAxisAngle(up, this.viewYaw);
+        this.camTarget.copy(base).addScaledVector(up, meters(1.8)).addScaledVector(axis, -meters(5) * this.viewZoom);
+        this.camLook.copy(base).addScaledVector(up, meters(.9 + this.photoTilt * 4));
+        cam.position.lerp(this.camTarget, k); cam.up.copy(up);
+      }
       cam.lookAt(this.camLook);
     }
 
@@ -429,7 +583,7 @@ export class EarthRunApp {
     this.satellite.update(this.params.cloudSpeed, now);
     this.npcs.update(now, dt);
 
-    this.planet.applyParams(this.params, this.lightDir);
+    this.planet.applyParams(this.mode === "play" ? { ...this.params, outlineWidth: meters(.05) } : this.params, this.lightDir);
     this.renderer.render(this.scene, cam);
   };
 
@@ -450,6 +604,8 @@ export class EarthRunApp {
     this.whale.dispose();
     this.satellite.dispose();
     this.race.dispose();
+    this.journey.dispose();
+    this.discovery.dispose();
     this.landmarks.dispose();
     this.npcs.dispose();
     this.streetProps.dispose();

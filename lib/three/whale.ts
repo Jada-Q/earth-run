@@ -1,3 +1,4 @@
+import { beveledBox } from "./beveled-box";
 // Whale moments — every minute or two, somewhere in deep ocean, a small
 // white spout puffs up, then an ink tail fin arcs through the surface and
 // is gone. Designed as a rare-glimpse delight for an always-on wallpaper:
@@ -5,7 +6,6 @@
 
 import {
   BackSide,
-  BoxGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -14,7 +14,7 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import { INK } from "./palette";
+import { WORLD_STYLE } from "./palette";
 import { makeGradientMap } from "./clouds";
 import { loadLandMask, isSea, type LandMask } from "./ships";
 import { latLngToVec3 } from "./geo";
@@ -59,7 +59,7 @@ export function buildWhale(): Whale {
     [];
   for (let i = 0; i < 3; i++) {
     const mat = new MeshBasicMaterial({
-      color: "#f6f4ee",
+      color: WORLD_STYLE.cloud,
       transparent: true,
       opacity: 0,
     });
@@ -69,15 +69,15 @@ export function buildWhale(): Whale {
   }
 
   // Tail fin: flat ink box that arcs through the surface.
-  const finGeo = new BoxGeometry(0.5, 1.0, 0.14);
+  const finGeo = beveledBox(0.5, 1.0, 0.14);
   const finMat = new MeshToonMaterial({
-    color: "#3a4d48",
+    color: WORLD_STYLE.teal,
     gradientMap: makeGradientMap(3, 0.75),
     transparent: true,
     opacity: 0,
   });
   const finHullMat = new MeshBasicMaterial({
-    color: INK,
+    color: WORLD_STYLE.ink,
     side: BackSide,
     transparent: true,
     opacity: 0,
@@ -87,7 +87,7 @@ export function buildWhale(): Whale {
   fin.position.y = 0.55;
   const finHull = new Mesh(finGeo, finHullMat);
   finHull.position.y = 0.55;
-  finHull.scale.setScalar(1.15);
+  finHull.scale.setScalar(1.045);
   finPivot.add(finHull, fin);
   finPivot.scale.setScalar(0.03);
   group.add(finPivot);

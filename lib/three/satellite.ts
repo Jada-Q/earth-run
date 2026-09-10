@@ -1,9 +1,9 @@
+import { beveledBox } from "./beveled-box";
 // A lone satellite on the highest orbit — body, two solar panels, a
 // blinking beacon, and a faint dashed orbit line. It watches the earth the
 // way the quake feed does.
 
 import {
-  BoxGeometry,
   BufferGeometry,
   Group,
   Line,
@@ -14,10 +14,10 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import { INK } from "./palette";
+import { WORLD_STYLE } from "./palette";
 import { makeGradientMap } from "./clouds";
 
-const ORBIT_RADIUS = 1.42;
+const ORBIT_RADIUS = 1.56;
 const SPEED = 0.0009; // rad/frame @60fps
 
 export interface Satellite {
@@ -41,9 +41,9 @@ export function buildSatellite(): Satellite {
   }
   const ringGeo = new BufferGeometry().setFromPoints(pts);
   const ringMat = new LineDashedMaterial({
-    color: INK,
+    color: WORLD_STYLE.ink,
     transparent: true,
-    opacity: 0.22,
+    opacity: 0.10,
     dashSize: 0.03,
     gapSize: 0.025,
   });
@@ -54,15 +54,15 @@ export function buildSatellite(): Satellite {
   // Satellite body + panels + beacon.
   const sat = new Group();
   const bodyMat = new MeshToonMaterial({
-    color: "#e9e5d8",
+    color: WORLD_STYLE.paper,
     gradientMap: makeGradientMap(3, 0.75),
   });
   const panelMat = new MeshToonMaterial({
-    color: "#2e5d66",
+    color: WORLD_STYLE.teal,
     gradientMap: makeGradientMap(3, 0.75),
   });
-  const bodyGeo = new BoxGeometry(0.3, 0.3, 0.45);
-  const panelGeo = new BoxGeometry(0.85, 0.04, 0.32);
+  const bodyGeo = beveledBox(0.3, 0.3, 0.45);
+  const panelGeo = beveledBox(0.85, 0.04, 0.32);
   const body = new Mesh(bodyGeo, bodyMat);
   const p1 = new Mesh(panelGeo, panelMat);
   p1.position.x = 0.62;
@@ -70,7 +70,7 @@ export function buildSatellite(): Satellite {
   p2.position.x = -0.62;
   const beaconGeo = new SphereGeometry(0.09, 6, 4);
   const beaconMat = new MeshBasicMaterial({
-    color: "#f6f4ee",
+    color: WORLD_STYLE.cloud,
     transparent: true,
   });
   const beacon = new Mesh(beaconGeo, beaconMat);

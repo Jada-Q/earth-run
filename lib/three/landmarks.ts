@@ -1,11 +1,14 @@
+import { meters, LANDMARK_HEIGHT_M } from "./world-scale";
+import { buildRegionalHouses } from "./regional-houses";
 // City landmarks — one iconic voxel structure per checkpoint city,
 // recognition by silhouette (the palette stays cool/neutral: paper, teal,
 // vegetation green, ink, cream). Each is a handful of primitives with ink
 // hulls, ~1.5-2.5x runner height. Generic houses around every city are
-// instanced: four draw calls for ALL houses on the planet.
+// instanced by regional style and material.
 
 import {
   BackSide,
+  Box3,
   BoxGeometry,
   ConeGeometry,
   CylinderGeometry,
@@ -23,6 +26,8 @@ import { INK } from "./palette";
 import { wobbleGeo } from "./wobble-geo";
 import { makeGradientMap } from "./clouds";
 import { latLngToVec3 } from "./geo";
+import { buildTokyoTower } from "./tokyo-tower";
+import { buildCityBuilding, cityBuildingRadius, cityReferenceHeight } from "./city-buildings";
 
 // Same coords as the race route (plus the start city itself).
 const CITIES: Array<{ key: string; name: string; lat: number; lng: number }> = [
@@ -80,6 +85,7 @@ export interface Landmarks {
 
 export function buildLandmarks(): Landmarks {
   const group = new Group();
+  const originalModels = new URLSearchParams(window.location.search).get("models") === "original";
   const disposables: Array<{ dispose(): void }> = [];
 
   const mats = new Map<string, MeshToonMaterial>();
@@ -316,7 +322,7 @@ export function buildLandmarks(): Landmarks {
   // the 1.5x scale. All smaller than the 5.5° checkpoint pass radius, so
   // racing is unaffected.
   const FOOTPRINT: Record<string, number> = {
-    tokyo: 0.024,
+    tokyo: originalModels ? 0.024 : 0.053,
     la: 0.05,
     chicago: 0.018,
     nyc: 0.02,
@@ -339,29 +345,65 @@ export function buildLandmarks(): Landmarks {
     anchors.push({ key: c.key, name: c.name, dir, east, north });
 
     const holder = new Group();
+    holder.name = `landmark:${c.key}`;
+    const visualScale = originalModels ? 1.5 : ({london:1.15,paris:1.15,rome:1.25,istanbul:1.35} as Record<string,number>)[c.key] ?? 1.5;
     // Close to the gate (a far offset hides the base behind the horizon
     // bulge — tall landmarks looked like they levitated), and sunk a touch
-    // below the surface so every leg/base is properly grounded.
+    // at the surface; physical dimensions are calibrated after construction.
+    // The expanded Eiffel footprint would overlap London's collision disc
+    // on this deliberately tiny globe. Separate the two display anchors;
+    // the geographic checkpoint coordinates remain unchanged.
+    const northOffset = originalModels ? 0.022
+      : c.key === "london" ? 0.055 : c.key === "paris" ? -0.020 : 0.022;
     const p = new Vector3()
       .copy(dir)
-      .addScaledVector(north, 0.022)
+      .addScaledVector(north, northOffset)
       .normalize();
-    holder.position.copy(p).multiplyScalar(0.998);
-    // Monumental scale: buildings should tower over the runner (0.05).
-    holder.scale.setScalar(1.5);
+    holder.position.copy(p);
+    // Historical scale for the comparison path; physical scale is applied below.
+    holder.scale.setScalar(visualScale);
     colliders.push({
       dir: p.clone(),
-      minDot: Math.cos(FOOTPRINT[c.key] ?? 0.018),
+      minDot: Math.cos(!originalModels && cityBuildingRadius(c.key) !== undefined
+        ? cityBuildingRadius(c.key)! * visualScale + 0.002
+        : FOOTPRINT[c.key] ?? 0.018),
     });
     anchor.position.copy(p);
     anchor.lookAt(p.x * 2, p.y * 2, p.z * 2);
     holder.quaternion.copy(anchor.quaternion);
     holder.rotateX(Math.PI / 2); // local +Y becomes the outward normal
-    builders[c.key](holder);
+    // Keep the original procedural version available for visual comparisons.
+    if (c.key === "tokyo" && !originalModels) {
+      const tower = buildTokyoTower();
+      holder.add(tower.group);
+      disposables.push(tower);
+    } else {
+      const building = originalModels ? null : buildCityBuilding(c.key);
+      if (building) {
+        // Runners approach eastbound; face the letter sign, statue and
+        // inscribed gate toward the incoming follow camera, not edge-on.
+        if (["la", "nyc", "delhi"].includes(c.key)) building.group.rotation.y = -Math.PI / 2;
+        holder.add(building.group);
+        disposables.push(building);
+      } else {
+        builders[c.key](holder);
+      }
+    }
+    if(!originalModels) {
+      holder.updateMatrixWorld(true);
+      // Measure in local coordinates before globe rotation, preserving aspect ratio.
+      const local=new Group();for(const child of holder.children)local.add(child.clone());
+      const box=new Box3().setFromObject(local),size=box.getSize(new Vector3());
+      const physicalScale=meters(LANDMARK_HEIGHT_M[c.key])/(cityReferenceHeight(c.key) ?? size.y);
+      holder.scale.setScalar(physicalScale);
+      const radius=Math.hypot(Math.max(Math.abs(box.min.x),Math.abs(box.max.x)),Math.max(Math.abs(box.min.z),Math.abs(box.max.z)))*physicalScale;
+      colliders[colliders.length-1].minDot=Math.cos(radius+meters(1));
+      holder.userData.heightMeters=LANDMARK_HEIGHT_M[c.key];
+    }
     group.add(holder);
   }
 
-  // Instanced generic houses: a loose ring of cottages around every city.
+  // Regional neighborhoods; retain the original cottage path for comparison.
   const bodyGeo = new BoxGeometry(0.016, 0.012, 0.013);
   const roofGeo = new ConeGeometry(0.012, 0.01, 4);
   const bodyMat = matOf(PAPER);
@@ -371,6 +413,12 @@ export function buildLandmarks(): Landmarks {
   const total = CITIES.length * HOUSES_PER_CITY;
   const bodies = new InstancedMesh(bodyGeo, bodyMat, total);
   const roofs = new InstancedMesh(roofGeo, roofMat, total);
+  const houses = originalModels ? null : buildRegionalHouses(HOUSES_PER_CITY);
+  if (houses) disposables.push(houses);
+  const houseRadius = houses ? houses.radius + 0.002 : 0.016;
+  const houseMinDot = houses ? Math.cos(houseRadius) : HOUSE_R;
+  // All monument footprints are known before placing the first cottage.
+  const monuments = colliders.slice();
 
   let seed = 987654;
   const rng = () => {
@@ -390,21 +438,23 @@ export function buildLandmarks(): Landmarks {
       // runner ping-pongs between their boundaries forever.
       let p = new Vector3();
       let ok = false;
-      for (let tries = 0; tries < 24 && !ok; tries++) {
+      for (let tries = 0; tries < (originalModels ? 24 : 72) && !ok; tries++) {
         const ang = rng() * Math.PI * 2;
-        const rad = 0.028 + rng() * 0.03;
+        const rad = originalModels ? 0.028 + rng() * 0.03
+          : Math.max(0.035, Math.acos(monument.minDot) + houseRadius) + rng() * 0.04;
         p = new Vector3()
           .copy(a.dir)
           .addScaledVector(a.east, Math.cos(ang) * rad)
           .addScaledVector(a.north, Math.sin(ang) * rad)
           .normalize();
-        const clearOfMonument =
-          p.dot(monument.dir) <
-          Math.cos(Math.acos(monument.minDot) + 0.016 + 0.004);
+        const clearOfMonument = (originalModels ? [monument] : monuments).every((m) =>
+          p.dot(m.dir) < Math.cos(Math.acos(m.minDot) + houseRadius + (originalModels ? 0.004 : 0.014)));
         const clearOfSiblings = placedHouses.every(
-          (q2) => p.dot(q2) < Math.cos(0.026),
+          (q2) => p.dot(q2) < Math.cos(originalModels ? 0.026 : 2 * houseRadius + 0.014),
         );
-        ok = clearOfMonument && clearOfSiblings;
+        const clearOfOtherHouses = originalModels || colliders.slice(monuments.length).every((c) =>
+          p.dot(c.dir) < Math.cos(2 * houseRadius + 0.014));
+        ok = clearOfMonument && clearOfSiblings && clearOfOtherHouses;
       }
       if (!ok) continue; // crowded city — fewer cottages beats overlap
       placedHouses.push(p.clone());
@@ -412,6 +462,19 @@ export function buildLandmarks(): Landmarks {
       tmp.lookAt(p.x * 2, p.y * 2, p.z * 2);
       tmp.rotateX(Math.PI / 2);
       tmp.rotateY(rng() * Math.PI);
+      if (houses) {
+        // Regional assets use game scale and a foot-level origin.
+        tmp.position.copy(p).multiplyScalar(0.9998);
+        const facade = a.dir.clone().addScaledVector(p, -a.dir.dot(p)).normalize();
+        const right = p.clone().cross(facade).normalize();
+        tmp.quaternion.setFromRotationMatrix(m4.makeBasis(right, p, facade));
+        tmp.scale.setScalar(1);
+        tmp.updateMatrix();
+        houses.place(a.key, h % 2, tmp.matrix);
+        colliders.push({ dir: p.clone(), minDot: houseMinDot });
+        i++;
+        continue;
+      }
       // 2.2x: a cottage must at least match the runner (0.05) or the scale
       // story breaks. Body sits half-height above ground; roof on top.
       tmp.scale.setScalar(2.2);
@@ -426,9 +489,18 @@ export function buildLandmarks(): Landmarks {
     }
   }
   void m4;
-  bodies.instanceMatrix.needsUpdate = true;
-  roofs.instanceMatrix.needsUpdate = true;
-  group.add(bodies, roofs);
+  if (houses) {
+    houses.finish();
+    group.add(houses.group);
+    bodies.dispose();
+    roofs.dispose();
+  } else {
+    bodies.count = roofs.count = i;
+    bodies.instanceMatrix.needsUpdate = true;
+    roofs.instanceMatrix.needsUpdate = true;
+    group.add(bodies, roofs);
+    disposables.push(bodies, roofs);
+  }
 
   return {
     group,

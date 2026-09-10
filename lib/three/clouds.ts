@@ -5,15 +5,15 @@
 import {
   DataTexture,
   Group,
+  IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
   MeshToonMaterial,
   NearestFilter,
   Object3D,
   RedFormat,
-  SphereGeometry,
 } from "three";
-import { CLOUD } from "./palette";
+import { WORLD_STYLE } from "./palette";
 
 /** 3×1 stepped gradient map for MeshToonMaterial-based props. */
 export function makeGradientMap(steps: number, shadeMul: number): DataTexture {
@@ -55,10 +55,18 @@ export function buildClouds(): Clouds {
   const root = new Group();
   const rng = makeRng(20260611);
 
-  const geo = new SphereGeometry(1, 10, 8);
+  // Rounded, faceted lobes with a shallow flat underside, like the
+  // hand-built architecture. Local +Y points away from the planet.
+  const geo = new IcosahedronGeometry(1, 2);
+  const vertices = geo.getAttribute("position");
+  for (let i = 0; i < vertices.count; i++) {
+    vertices.setY(i, Math.max(-0.55, vertices.getY(i)));
+  }
+  vertices.needsUpdate = true;
+  geo.computeVertexNormals();
   const mat = new MeshToonMaterial({
-    color: CLOUD,
-    gradientMap: makeGradientMap(3, 0.82),
+    color: WORLD_STYLE.cloud,
+    gradientMap: makeGradientMap(4, 0.70),
   });
 
   const shells: Shell[] = [];
@@ -67,11 +75,10 @@ export function buildClouds(): Clouds {
   const offset = new Matrix4();
 
   const SHELLS = [
-    // Above the tallest landmark (~1.17 after the 1.5x monument scale) —
-    // clouds drifting THROUGH skyscrapers read as a glitch.
-    { radius: 1.2, tiltX: 0.3, tiltZ: 0.15, clusters: 3, speed: 0.00045 },
-    { radius: 1.23, tiltX: -0.2, tiltZ: 0.4, clusters: 3, speed: -0.0003 },
-    { radius: 1.27, tiltX: 0.5, tiltZ: -0.25, clusters: 2, speed: 0.0006 },
+    // Lowest lobe stays above radius 1.26. The new Burj reaches ~1.216.
+    { radius: 1.30, tiltX: 0.3, tiltZ: 0.15, clusters: 4, speed: 0.00028 },
+    { radius: 1.34, tiltX: -0.2, tiltZ: 0.4, clusters: 3, speed: -0.00020 },
+    { radius: 1.38, tiltX: 0.5, tiltZ: -0.25, clusters: 3, speed: 0.00034 },
   ];
 
   for (const cfg of SHELLS) {
@@ -83,7 +90,7 @@ export function buildClouds(): Clouds {
     const clusters: Array<{ lat: number; lng: number; puffs: number }> = [];
     let total = 0;
     for (let c = 0; c < cfg.clusters; c++) {
-      const puffs = 3 + Math.floor(rng() * 3); // 3-5
+      const puffs = 5;
       clusters.push({
         lat: -55 + rng() * 110,
         lng: rng() * 360,
@@ -102,19 +109,29 @@ export function buildClouds(): Clouds {
         Math.sin(latR) * cfg.radius,
         -Math.cos(latR) * Math.sin(lngR) * cfg.radius,
       );
-      anchor.lookAt(0, 0, 0);
+      anchor.lookAt(anchor.position.clone().multiplyScalar(2));
+      anchor.rotateX(Math.PI / 2);
       anchor.updateMatrix();
+      const s = 0.036 + rng() * 0.014;
+      const lobes = [
+        [-1.05, -0.06, 0.0, 0.78],
+        [0.0, 0.25, 0.0, 1.0],
+        [1.05, -0.04, -0.08, 0.72],
+        [-0.48, -0.13, 0.38, 0.76],
+        [0.51, -0.12, 0.36, 0.72],
+      ];
       for (let p = 0; p < cl.puffs; p++) {
-        const s = 0.035 + rng() * 0.05;
-        tmp.position.set((rng() - 0.5) * 0.14, (rng() - 0.5) * 0.07, 0);
-        tmp.scale.set(s * (1.1 + rng() * 0.5), s * 0.55, s * 0.85);
-        tmp.rotation.set(0, 0, rng() * Math.PI);
+        const [x, y, z, size] = lobes[p];
+        tmp.position.set(x * s, y * s, z * s);
+        tmp.scale.set(s * size * 1.10, s * size * 0.85, s * size * 0.86);
+        tmp.rotation.set(0, (rng() - 0.5) * 0.30, 0);
         tmp.updateMatrix();
         offset.multiplyMatrices(anchor.matrix, tmp.matrix);
         mesh.setMatrixAt(i++, offset);
       }
     }
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
     shell.add(mesh);
     root.add(shell);
     shells.push({ group: shell, speed: cfg.speed });
@@ -126,6 +143,7 @@ export function buildClouds(): Clouds {
       for (const s of shells) s.group.rotation.y += s.speed * speedMul;
     },
     dispose() {
+      root.traverse((object) => { if (object instanceof InstancedMesh) object.dispose(); });
       geo.dispose();
       mat.dispose();
       mat.gradientMap?.dispose();

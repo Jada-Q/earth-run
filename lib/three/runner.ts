@@ -1,27 +1,11 @@
-// The runner — chunky big-head proportions (head ≈ half the body height,
-// stub limbs, bold simple face), flat toon colors, thin ink hulls. Our own
-// design in the reference sheet's style language. Procedurally animated:
-// swinging stubs for the run cycle, a breathe for idle, tuck for jumps.
-//
-// Local frame: +X = facing/travel direction, +Y = up (radial), origin at
-// the soles of the feet.
-
-import {
-  BackSide,
-  BoxGeometry,
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-  MeshToonMaterial,
-} from "three";
-import { INK } from "./palette";
-import { wobbleGeo } from "./wobble-geo";
-import { makeGradientMap } from "./clouds";
+import { fitPhysicalDimension, HUMAN_HEIGHT_M } from "./world-scale";
+// A smooth, articulated traveler. Local +X faces forward; feet sit at Y=0.
+import { Group } from "three";
+import { organicKit } from "./organic-model";
+import { WORLD_STYLE } from "./palette";
 
 export type RunnerPose = "idle" | "run" | "jump" | "chop";
 
-const SCALE = 0.034; // pedestrian-sized — same league as the residents
-const HULL = 1.06;
 
 /** Outfit color scheme — picked on the title screen. */
 export interface Outfit {
@@ -43,167 +27,85 @@ export interface Runner {
   dispose(): void;
 }
 
-export function buildRunner(outfit: Outfit = OUTFITS[0]): Runner {
+export function buildRunner(outfit: Outfit = OUTFITS[0], detail: "hero" | "resident" = "hero"): Runner {
   const root = new Group();
   const body = new Group();
   root.add(body);
-
-  const mats: MeshToonMaterial[] = [];
-  const matOf = (hex: string) => {
-    const m = new MeshToonMaterial({
-      color: hex,
-      gradientMap: makeGradientMap(3, 0.82),
-    });
-    mats.push(m);
-    return m;
-  };
-  const teal = matOf(outfit.jacket);
-  const paper = matOf("#f2efe6");
-  const skin = matOf("#eecfa4");
-  const sage = matOf("#9fbfa8");
-  const crest = matOf(outfit.crest);
-  const white = new MeshBasicMaterial({ color: "#fbfaf5" });
-  const inkSolid = new MeshBasicMaterial({ color: INK });
-  const inkHull = new MeshBasicMaterial({ color: INK, side: BackSide });
-
-  const geos: BoxGeometry[] = [];
-  const addBox = (
-    parent: Group,
-    mat: MeshToonMaterial | MeshBasicMaterial,
-    w: number,
-    h: number,
-    d: number,
-    x: number,
-    y: number,
-    z: number,
-    hull = true,
-  ) => {
-    const geo = new BoxGeometry(w, h, d);
-    geos.push(geo);
-    const m = new Mesh(geo, mat);
-    m.position.set(x, y, z);
-    parent.add(m);
-    if (hull) {
-      const wGeo = wobbleGeo(geo);
-      geos.push(wGeo as BoxGeometry);
-      const hm = new Mesh(wGeo, inkHull);
-      hm.position.set(x, y, z);
-      hm.scale.setScalar(HULL);
-      parent.add(hm);
-    }
-    return m;
-  };
-
-  // ---- squat body + messenger bag ---------------------------------------
-  addBox(body, teal, 0.42, 0.3, 0.3, 0, 0.3, 0); // torso
-  addBox(body, paper, 0.43, 0.09, 0.31, 0, 0.19, 0); // hem stripe
-  addBox(body, sage, 0.05, 0.24, 0.31, 0.0, 0.34, 0); // bag strap
-  addBox(body, sage, 0.18, 0.2, 0.1, -0.24, 0.32, 0); // bag on the back
-
-  // ---- BIG head ----------------------------------------------------------
-  addBox(body, skin, 0.46, 0.42, 0.44, 0, 0.68, 0);
-  // little mouth (eyes tried and retired by request — clean face)
-  addBox(body, inkSolid, 0.016, 0.03, 0.08, 0.245, 0.54, 0, false);
-  // mohawk crest front-to-back + cap band
-  addBox(body, crest, 0.34, 0.12, 0.1, -0.02, 0.94, 0);
-  addBox(body, teal, 0.48, 0.07, 0.46, 0, 0.875, 0); // cap band
-  addBox(body, teal, 0.14, 0.035, 0.34, 0.27, 0.86, 0); // brim
-
-  // ---- stub limbs (pivots at shoulder/hip) -------------------------------
-  const makeLimb = (
-    px: number,
-    py: number,
-    pz: number,
-    upper: { mat: MeshToonMaterial; len: number; thick: number },
-    tip: { mat: MeshToonMaterial; w: number; h: number; d: number; fwd?: number },
-  ) => {
-    const pivot = new Group();
-    pivot.position.set(px, py, pz);
-    addBox(pivot, upper.mat, upper.thick, upper.len, upper.thick, 0, -upper.len / 2, 0);
-    addBox(
-      pivot,
-      tip.mat,
-      tip.w,
-      tip.h,
-      tip.d,
-      tip.fwd ?? 0,
-      -upper.len - tip.h / 2 + 0.012,
-      0,
-    );
-    body.add(pivot);
-    return pivot;
-  };
-
-  const armL = makeLimb(
-    0, 0.42, -0.26,
-    { mat: teal, len: 0.16, thick: 0.1 },
-    { mat: skin, w: 0.1, h: 0.09, d: 0.1 },
-  );
-  const armR = makeLimb(
-    0, 0.42, 0.26,
-    { mat: teal, len: 0.16, thick: 0.1 },
-    { mat: skin, w: 0.1, h: 0.09, d: 0.1 },
-  );
-  const legL = makeLimb(
-    0, 0.16, -0.1,
-    { mat: skin, len: 0.08, thick: 0.11 },
-    { mat: crest, w: 0.2, h: 0.08, d: 0.14, fwd: 0.045 }, // chunky shoes
-  );
-  const legR = makeLimb(
-    0, 0.16, 0.1,
-    { mat: skin, len: 0.08, thick: 0.11 },
-    { mat: crest, w: 0.2, h: 0.08, d: 0.14, fwd: 0.045 },
-  );
-
-  root.scale.setScalar(SCALE);
-
+  const kit = organicKit(detail);
+  const skin = "#e5b990";
+  const pants = "#455b60";
+  const hair = "#51463d";
+  // A continuous jacket surface: hips, waist, chest and sloping shoulders.
+  kit.profile(body, outfit.jacket, [[0,.43],[.115,.43],[.14,.47],[.13,.54],[.155,.64],[.15,.69],[.105,.73],[.055,.74],[0,.74]],0,0,0,.66);
+  kit.oval(body, pants,0,.43,0,.09,.095,.125);
+  kit.oval(body, skin,0,.755,0,.045,.06,.047);
+  const head=new Group();body.add(head);
+  kit.oval(head, skin,.015,.89,0,.12,.145,.105);
+  kit.oval(head, skin,.124,.875,0,.035,.031,.024,false); // nose
+  for (const side of [-1,1]) {
+    kit.oval(head, skin,0,.885,side*.105,.027,.044,.021,false);
+    kit.oval(head,"#393e39",.116,.919,side*.040,.012,.012,.009,false);
+    kit.curve(head,hair,[[.107,.94,side*.028],[.113,.944,side*.043],[.10,.94,side*.055]],.004);
+  }
+  kit.curve(head,"#a56d59",[[.123,.842,-.025],[.13,.839,0],[.123,.842,.025]],.003);
+  // Close-fitting hair and soft travel cap; no rectangular head or crest.
+  kit.oval(head,hair,-.026,.948,0,.105,.084,.109);
+  kit.oval(head,outfit.jacket,-.016,.99,0,.118,.069,.12);
+  kit.oval(head,outfit.jacket,.105,.976,0,.092,.012,.114);
+  kit.oval(head,outfit.crest,.114,1.007,0,.013,.020,.027,false);
+  // Reduce the head-to-body ratio while retaining the existing eye/hat assembly.
+  for(const part of head.children)part.position.y-=.89;
+  head.scale.setScalar(.82);head.position.y=.89;
+  // Curved pack and straps follow the torso.
+  kit.oval(body,WORLD_STYLE.bark,-.105,.595,0,.060,.13,.12);
+  kit.oval(body,outfit.jacket,-.15,.665,0,.028,.055,.115);
+  for (const z of [-.083,.083]) kit.curve(body,WORLD_STYLE.paper,[[-.10,.66,z],[0,.718,z],[.095,.64,z],[.085,.49,z]],.013);
+  kit.curve(body,WORLD_STYLE.paper,[[.094,.48,0],[.099,.57,0],[.098,.68,0]],.004);
+  const arms: Group[] = [], elbows: Group[] = [], legs: Group[] = [], knees: Group[] = [];
+  for (const side of [-1,1]) {
+    const arm = new Group(); arm.position.set(0,.685,side*.15); body.add(arm);
+    kit.oval(arm,outfit.jacket,0,-.073,0,.048,.099,.046);
+    const elbow = new Group(); elbow.position.y=-.15; arm.add(elbow);
+    kit.oval(elbow,outfit.jacket,0,-.045,0,.037,.075,.037);
+    kit.oval(elbow,skin,0,-.128,0,.031,.045,.027);
+    kit.oval(elbow,skin,.023,-.122,side*.014,.013,.026,.014,false);
+    elbow.rotation.z=-.3; arms.push(arm); elbows.push(elbow);
+    const hip = new Group(); hip.position.set(0,.445,side*.077); body.add(hip);
+    kit.oval(hip,pants,0,-.105,0,.058,.135,.055);
+    const knee = new Group(); knee.position.y=-.217; hip.add(knee);
+    kit.oval(knee,pants,0,-.09,0,.042,.118,.043);
+    kit.oval(knee,outfit.crest,.036,-.192,0,.084,.036,.049);
+    kit.oval(knee,WORLD_STYLE.paper,.037,-.214,0,.085,.014,.05);
+    legs.push(hip); knees.push(knee);
+  }
+  fitPhysicalDimension(root,"y",HUMAN_HEIGHT_M);
   return {
     group: root,
     setPose(pose: RunnerPose, phase: number) {
-      if (pose === "run") {
-        const s = Math.sin(phase);
-        legL.rotation.z = s * 1.1;
-        legR.rotation.z = -s * 1.1;
-        armL.rotation.z = -s * 0.9;
-        armR.rotation.z = s * 0.9;
-        // Big-head bounce sells the chunky run.
-        body.position.y = Math.abs(Math.cos(phase)) * 0.07;
-        body.rotation.z = -0.12;
-      } else if (pose === "chop") {
-        // Both arms swing down hard, body dips into the blow.
-        const sw = Math.sin(Math.min(phase, 1) * Math.PI);
-        armL.rotation.z = -2.2 + sw * 1.6;
-        armR.rotation.z = -2.2 + sw * 1.6;
-        legL.rotation.z = 0.15;
-        legR.rotation.z = -0.15;
-        body.position.y = -sw * 0.04;
-        body.rotation.z = -0.22 * sw;
-      } else if (pose === "jump") {
-        legL.rotation.z = 0.7;
-        legR.rotation.z = -0.5;
-        armL.rotation.z = -1.6;
-        armR.rotation.z = -1.6;
-        body.position.y = 0;
-        body.rotation.z = -0.05;
-      } else {
-        const breathe = Math.sin(phase * 0.15);
-        legL.rotation.z = 0;
-        legR.rotation.z = 0;
-        armL.rotation.z = breathe * 0.08;
-        armR.rotation.z = -breathe * 0.08;
-        body.position.y = Math.max(0, breathe) * 0.012;
-        body.rotation.z = 0;
-      }
+      body.position.y=0; body.rotation.z=0;
+      for(let i=0;i<2;i++) { arms[i].rotation.z=0; elbows[i].rotation.z=-.3; legs[i].rotation.z=0; knees[i].rotation.z=0; }
+      if(pose==="run") {
+        const stride=Math.sin(phase);
+        for(let i=0;i<2;i++) {
+          const s=stride*(i===0?1:-1);
+          legs[i].rotation.z=s*.65;
+          knees[i].rotation.z=Math.max(0,-s)*.95;
+          arms[i].rotation.z=-s*.6;
+          elbows[i].rotation.z=-.7;
+        }
+        body.position.y=Math.abs(Math.cos(phase))*.025;
+        body.rotation.z=-.08;
+      } else if(pose==="jump") {
+        legs[0].rotation.z=-.45; legs[1].rotation.z=.35;
+        knees[0].rotation.z=.9; knees[1].rotation.z=.6;
+        arms.forEach(a=>a.rotation.z=-1.35);
+      } else if(pose==="chop") {
+        const sw=Math.sin(Math.min(phase,1)*Math.PI);
+        arms.forEach(a=>a.rotation.z=-2.3+sw*1.6);
+        body.rotation.z=-.18*sw;
+        knees.forEach(k=>k.rotation.z=.15*sw);
+      } else body.position.y=Math.sin(phase*.15)*.006;
     },
-    dispose() {
-      for (const g of geos) g.dispose();
-      for (const m of mats) {
-        m.gradientMap?.dispose();
-        m.dispose();
-      }
-      white.dispose();
-      inkSolid.dispose();
-      inkHull.dispose();
-    },
+    dispose: kit.dispose,
   };
 }
