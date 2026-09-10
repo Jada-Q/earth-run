@@ -1,3 +1,4 @@
+import { meters } from "./world-scale";
 // EarthRunApp — imperative three.js orchestrator for the tiny-planet racing
 // game. Step-1 shape: the living toon planet (clouds, planes, ships, birds,
 // whale, satellite, day/night) with a free orbit camera; the runner,
@@ -55,12 +56,12 @@ const SPAWN = { lat: 35.7, lng: 139.7 }; // Tokyo
 const ENTER_MS = 900;
 const ORBIT_FOV = 30;
 const PLAY_FOV = 52;
-const CAM_DIST = 0.21; // behind the (now pedestrian-sized) runner
-const CAM_HEIGHT = 0.065; // low — street-level feel, horizon high in frame
+const CAM_DIST = meters(9); // behind the (now pedestrian-sized) runner
+const CAM_HEIGHT = meters(4); // low — street-level feel, horizon high in frame
 // In town the camera rises and looks down over the rooftops — a ground
 // level camera jammed between cottages/poles clips through everything.
-const CAM_HEIGHT_CITY = 0.16;
-const CAM_DIST_CITY = 0.27;
+const CAM_HEIGHT_CITY = meters(5);
+const CAM_DIST_CITY = meters(12);
 const CITY_CAM_COS = Math.cos((3.2 * Math.PI) / 180);
 const CAM_SMOOTH = 7; // exponential smoothing rate
 
@@ -128,9 +129,9 @@ export class EarthRunApp {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.rig = new CameraRig(HOME_VIEW);
 
-    this.sun = new DirectionalLight("#fff1d6", 2.35); // warm afternoon key
+    this.sun = new DirectionalLight("#fff3df", 1.8); // soft studio-like afternoon key
     this.applyLightDir();
-    this.scene.add(this.sun, new AmbientLight("#dcebf5", 0.6)); // cool sky fill
+    this.scene.add(this.sun, new AmbientLight("#e5eee9", 0.8)); // neutral sage sky fill
 
     this.tiltGroup.add(this.spinGroup);
     this.scene.add(this.tiltGroup);
@@ -167,6 +168,7 @@ export class EarthRunApp {
       new ConeGeometry(0.007, 0.02, 4),
       new MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.6 }),
     );
+    this.guideArrow.scale.setScalar(.02);
     this.guideArrow.visible = false;
     this.scene.add(this.guideArrow);
 
@@ -358,8 +360,8 @@ export class EarthRunApp {
         this.guideArrow.visible = true;
         this.guideArrow.position
           .copy(this.player.group.position)
-          .addScaledVector(this.player.up, 0.006)
-          .addScaledVector(t, 0.075);
+          .addScaledVector(this.player.up, meters(0.3))
+          .addScaledVector(t, meters(5));
         this.guideQuat.setFromUnitVectors(this.guideArrow.up, t);
         this.guideArrow.quaternion.copy(this.guideQuat);
       } else {
@@ -409,7 +411,7 @@ export class EarthRunApp {
       cam.up.copy(up);
       // Look well past the runner so the horizon sits high in frame
       // (street-level feel, like the reference).
-      this.camLook.copy(this.player.group.position).addScaledVector(fwd, 0.3);
+      this.camLook.copy(this.player.group.position).addScaledVector(up, meters(1)).addScaledVector(fwd, meters(5));
       cam.lookAt(this.camLook);
     }
 

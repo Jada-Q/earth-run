@@ -20,7 +20,7 @@ import {
   TextureLoader,
   Vector3,
 } from "three";
-import { INK, PAPER, SEA, VEGETATION, type ToonParams } from "./palette";
+import { WORLD_STYLE, type ToonParams } from "./palette";
 
 /** Max terrain height in world units (planet radius = 1). Everest ends up
  *  ~0.022R — hugely exaggerated, like every globe ever made. The player
@@ -71,6 +71,10 @@ const FRAG = /* glsl */ `
   uniform vec3 uSea;
   uniform vec3 uLand;
   uniform vec3 uVegetation;
+  uniform vec3 uShallows;
+  uniform vec3 uSand;
+  uniform vec3 uRock;
+  uniform vec3 uSnow;
   uniform vec3 uInk;
   uniform vec3 uCityColor;
   uniform vec3 uLightDir;
@@ -93,13 +97,15 @@ const FRAG = /* glsl */ `
 
     float w = fwidth(d) * 1.2;
     float land = smoothstep(0.5 - w, 0.5 + w, d);
-    vec3 albedo = mix(uSea, mix(uLand, uVegetation, step(0.5, veg)), land);
+    // Large, quiet color areas instead of hard binary vegetation speckles.
+    vec3 meadow = mix(uLand, uVegetation, smoothstep(0.20, 0.82, veg));
+    vec3 ocean = mix(uSea, uShallows, smoothstep(0.34, 0.49, d) * 0.65);
+    vec3 ground = mix(uSand, meadow, smoothstep(0.50, 0.57, d));
+    vec3 albedo = mix(ocean, ground, land);
 
     // Elevation ramp: lowland colors → rocky brown → snow caps.
-    vec3 rock = vec3(0.62, 0.55, 0.46);
-    vec3 snow = vec3(0.95, 0.95, 0.93);
-    albedo = mix(albedo, rock, smoothstep(0.14, 0.38, vElev) * land);
-    albedo = mix(albedo, snow, smoothstep(0.48, 0.7, vElev) * land);
+    albedo = mix(albedo, uRock, smoothstep(0.20, 0.52, vElev) * land * 0.72);
+    albedo = mix(albedo, uSnow, smoothstep(0.56, 0.82, vElev) * land);
 
     // Coastline ink band hugging d = 0.5.
     float ink = 1.0 - smoothstep(uInkWidth, uInkWidth + w, abs(d - 0.5));
@@ -108,14 +114,18 @@ const FRAG = /* glsl */ `
     // --- per-pixel terrain normal (central differences on the heightmap).
     // Without this, displaced mountains have sphere-smooth lighting and
     // read as flat blobs — relief lives in the shading, not the silhouette.
-    vec2 du = vec2(1.0 / 2048.0, 0.0);
-    vec2 dv = vec2(0.0, 1.0 / 1024.0);
+    // Broader sampling keeps the large mountain forms, suppressing the
+    // noisy engraved appearance of one-texel SRTM slope differences.
+    // Vertex displacement and the CPU collision heightmap are unchanged.
+    const float reliefSpan = 5.0;
+    vec2 du = vec2(reliefSpan / 2048.0, 0.0);
+    vec2 dv = vec2(0.0, reliefSpan / 1024.0);
     float hE = texture2D(uElev, vUv + du).r;
     float hW = texture2D(uElev, vUv - du).r;
     float hN = texture2D(uElev, vUv - dv).r; // v grows southward
     float hS = texture2D(uElev, vUv + dv).r;
-    float arcE = 6.2832 / 2048.0 * max(vCosLat, 0.05);
-    float arcN = 3.1416 / 1024.0;
+    float arcE = 6.2832 * reliefSpan / 2048.0 * max(vCosLat, 0.05);
+    float arcN = 3.1416 * reliefSpan / 1024.0;
     float slopeE = (hE - hW) * uTerrain / (2.0 * arcE);
     float slopeN = (hN - hS) * uTerrain / (2.0 * arcN);
     vec3 nT = normalize(
@@ -126,21 +136,25 @@ const FRAG = /* glsl */ `
 
     // Quantized toon shading from the uniform sun, terrain-aware.
     float ndl = dot(nT, uLightDir) * 0.5 + 0.5;
-    float band = floor(ndl * uSteps) / max(uSteps - 1.0, 1.0);
+    float scaled = ndl * max(uSteps - 1.0, 1.0);
+    float band = (floor(scaled) + smoothstep(0.35, 0.65, fract(scaled))) / max(uSteps - 1.0, 1.0);
     band = clamp(band, 0.0, 1.0);
     vec3 color = albedo * mix(uShadeMul, 1.0, band);
 
     // Extra soft hillshade on top of the bands so ridge/valley detail
     // survives quantization (subtle, terrain only).
     float slopeShade = clamp(dot(nT, uLightDir) - dot(normalize(vNormal), uLightDir), -0.5, 0.5);
-    color *= 1.0 + slopeShade * 0.55 * land;
+    color *= 1.0 + slopeShade * 0.16 * land;
 
     // City lights bloom on the night side only (raw ndl, not banded —
     // they should fade in smoothly as a region rolls into darkness).
-    float night = smoothstep(0.42, 0.18, ndl);
+    float night = 1.0 - smoothstep(0.18, 0.42, ndl);
     color += uCityColor * city * night * land;
 
     gl_FragColor = vec4(color, 1.0);
+    // Match the built-in Three.js materials used by buildings and trees.
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -165,11 +179,15 @@ export function buildPlanet(params: ToonParams): Planet {
       uMask: { value: tex },
       uElev: { value: elevTex },
       uTerrain: { value: TERRAIN_SCALE },
-      uRelief: { value: 1.0 },
-      uSea: { value: new Color(SEA) },
-      uLand: { value: new Color(PAPER) },
-      uVegetation: { value: new Color(VEGETATION) },
-      uInk: { value: new Color(INK) },
+      uRelief: { value: 0.50 },
+      uSea: { value: new Color(WORLD_STYLE.sea) },
+      uLand: { value: new Color(WORLD_STYLE.land) },
+      uVegetation: { value: new Color(WORLD_STYLE.vegetation) },
+      uShallows: { value: new Color(WORLD_STYLE.shallows) },
+      uSand: { value: new Color(WORLD_STYLE.sand) },
+      uRock: { value: new Color(WORLD_STYLE.rock) },
+      uSnow: { value: new Color(WORLD_STYLE.snow) },
+      uInk: { value: new Color(WORLD_STYLE.coast) },
       // Pale cream — deliberately NOT the golden accent (reserved for CTA).
       uCityColor: { value: new Color("#efe7cf") },
       uLightDir: { value: new Vector3(0, 0, 1) },
@@ -181,7 +199,8 @@ export function buildPlanet(params: ToonParams): Planet {
   });
 
   // Dense enough for mountain silhouettes (49k verts — fine for one mesh).
-  const sphere = new Mesh(new SphereGeometry(1, 256, 192), material);
+  const geometry = new SphereGeometry(1, 256, 192);
+  const sphere = new Mesh(geometry, material);
   group.add(sphere);
 
   // Inverted-hull silhouette: back-face ink shell displaced by the SAME
@@ -197,17 +216,21 @@ export function buildPlanet(params: ToonParams): Planet {
     `,
     fragmentShader: /* glsl */ `
       uniform vec3 uInk;
-      void main() { gl_FragColor = vec4(uInk, 1.0); }
+      void main() {
+        gl_FragColor = vec4(uInk, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
     `,
     uniforms: {
-      uInk: { value: new Color(INK) },
+      uInk: { value: new Color(WORLD_STYLE.silhouette) },
       uElev: { value: elevTex },
       uTerrain: { value: TERRAIN_SCALE },
       uOutline: { value: params.outlineWidth },
     },
     side: BackSide,
   });
-  const hull = new Mesh(new SphereGeometry(1, 256, 192), hullMat);
+  const hull = new Mesh(geometry, hullMat);
   group.add(hull);
 
   return {
@@ -221,8 +244,7 @@ export function buildPlanet(params: ToonParams): Planet {
       hullMat.uniforms.uOutline.value = p.outlineWidth;
     },
     dispose() {
-      sphere.geometry.dispose();
-      hull.geometry.dispose();
+      geometry.dispose();
       material.dispose();
       hullMat.dispose();
       tex.dispose();

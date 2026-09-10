@@ -1,3 +1,4 @@
+import { beveledBox } from "./beveled-box";
 // Ambient toon airplanes — a few blocky paper planes orbiting above the
 // clouds on tilted great-circle paths, each with a fading contrail. Pure
 // box assembly + ink hulls, matching the voxel/toon language; ~3 small
@@ -5,7 +6,7 @@
 
 import {
   BackSide,
-  BoxGeometry,
+  BufferGeometry,
   DoubleSide,
   Group,
   Mesh,
@@ -14,10 +15,10 @@ import {
   PlaneGeometry,
   ShaderMaterial,
 } from "three";
-import { INK } from "./palette";
+import { WORLD_STYLE } from "./palette";
 import { makeGradientMap } from "./clouds";
 
-const ORBIT_RADIUS = 1.34; // above the cloud shells (1.20–1.27)
+const ORBIT_RADIUS = 1.48; // clear of the new volumetric cloud shells
 const PLANE_SCALE = 0.055;
 
 // Tilt (x/z) and speed (rad per frame @60fps) per plane — different axes
@@ -54,16 +55,16 @@ const TRAIL_FRAG = /* glsl */ `
 function buildPlaneMesh(): Group {
   const g = new Group();
   const body = new MeshToonMaterial({
-    color: "#f2efe6",
+    color: WORLD_STYLE.paper,
     gradientMap: makeGradientMap(3, 0.78),
   });
-  const inkMat = new MeshBasicMaterial({ color: INK, side: BackSide });
+  const inkMat = new MeshBasicMaterial({ color: WORLD_STYLE.ink, side: BackSide });
 
-  const parts: Array<[BoxGeometry, [number, number, number]]> = [
-    [new BoxGeometry(1.0, 0.22, 0.22), [0, 0, 0]], // fuselage
-    [new BoxGeometry(0.34, 0.06, 1.05), [0.06, 0, 0]], // main wing
-    [new BoxGeometry(0.18, 0.05, 0.42), [-0.42, 0.04, 0]], // tail wing
-    [new BoxGeometry(0.16, 0.3, 0.06), [-0.44, 0.14, 0]], // fin
+  const parts: Array<[BufferGeometry, [number, number, number]]> = [
+    [beveledBox(1.0, 0.22, 0.22), [0, 0, 0]], // fuselage
+    [beveledBox(0.34, 0.06, 1.05), [0.06, 0, 0]], // main wing
+    [beveledBox(0.18, 0.05, 0.42), [-0.42, 0.04, 0]], // tail wing
+    [beveledBox(0.16, 0.3, 0.06), [-0.44, 0.14, 0]], // fin
   ];
   for (const [geo, pos] of parts) {
     const m = new Mesh(geo, body);
@@ -71,7 +72,7 @@ function buildPlaneMesh(): Group {
     g.add(m);
     const hull = new Mesh(geo, inkMat);
     hull.position.set(...pos);
-    hull.scale.setScalar(1.18);
+    hull.scale.setScalar(1.045);
     g.add(hull);
   }
   g.scale.setScalar(PLANE_SCALE);

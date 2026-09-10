@@ -1,33 +1,8 @@
-// Ambient toon ships — blocky little boats riding the ocean surface inside
-// the spin group (they travel their routes AND rotate with the planet).
-//
-// A route is a tilted circle, which inevitably crosses continents — so each
-// frame a ship samples the SAME baked land-SDF mask the planet shader uses
-// (CPU copy) and fades out over land / back in over open sea. Reads as
-// "docked, then set sail again" instead of a boat driving across the Andes.
-
-import {
-  BackSide,
-  BoxGeometry,
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-  MeshToonMaterial,
-  Vector3,
-} from "three";
-import { INK } from "./palette";
-import { makeGradientMap } from "./clouds";
-
-const SURFACE_RADIUS = 1.004;
-const SHIP_SCALE = 0.034;
-const FADE_PER_FRAME = 0.04;
-
-const ROUTES = [
-  { tiltX: 0.45, tiltZ: -0.3, speed: 0.0005, phase: 0.5 },
-  { tiltX: -0.6, tiltZ: 0.25, speed: -0.00038, phase: 2.4 },
-  { tiltX: 0.15, tiltZ: 0.55, speed: 0.00046, phase: 4.0 },
-  { tiltX: -0.25, tiltZ: -0.65, speed: -0.00055, phase: 5.5 },
-];
+import { fitPhysicalSize, SHIP_SIZE_M } from "./world-scale";
+// Ocean traffic follows short, verified water-only routes in the planet frame.
+import { Group, Matrix4, Vector3 } from "three";
+import { buildShipModel, SHIP_TYPES } from "./ship-model";
+import { latLngToVec3 } from "./geo";
 
 /** CPU copy of the land mask R channel for sea/land lookups. */
 export interface LandMask {
@@ -57,135 +32,51 @@ export async function loadLandMask(): Promise<LandMask | null> {
 /** True when (lat, lng) is open sea — with a safety margin so ships fade
  *  before visually touching the coastline (SDF 0.5 = coast; lower = sea). */
 export function isSea(mask: LandMask, lat: number, lng: number): boolean {
-  const u = (lng + 180) / 360;
+  const u = (((lng + 180) / 360) % 1 + 1) % 1;
   const v = 1 - (lat + 90) / 180;
   const px = Math.min(mask.w - 1, Math.max(0, Math.round(u * mask.w)));
   const py = Math.min(mask.h - 1, Math.max(0, Math.round(v * mask.h)));
   return mask.data[(py * mask.w + px) * 4] < 110;
 }
 
-/** Blocky toon boat: hull + cabin + funnel, nose along +X. */
-function buildBoat(): {
-  group: Group;
-  setOpacity: (o: number) => void;
-} {
-  const g = new Group();
-  const body = new MeshToonMaterial({
-    color: "#f2efe6",
-    gradientMap: makeGradientMap(3, 0.78),
-    transparent: true,
-  });
-  const cabinMat = new MeshToonMaterial({
-    color: "#2e5d66",
-    gradientMap: makeGradientMap(3, 0.78),
-    transparent: true,
-  });
-  const inkMat = new MeshBasicMaterial({
-    color: INK,
-    side: BackSide,
-    transparent: true,
-  });
-
-  const parts: Array<[BoxGeometry, MeshToonMaterial, [number, number, number]]> = [
-    [new BoxGeometry(1.0, 0.3, 0.4), body, [0, 0, 0]], // hull
-    [new BoxGeometry(0.4, 0.3, 0.3), cabinMat, [-0.05, 0.3, 0]], // cabin
-    [new BoxGeometry(0.12, 0.3, 0.12), body, [0.22, 0.35, 0]], // funnel
-  ];
-  for (const [geo, mat, pos] of parts) {
-    const m = new Mesh(geo, mat);
-    m.position.set(...pos);
-    g.add(m);
-    const hull = new Mesh(geo, inkMat);
-    hull.position.set(...pos);
-    hull.scale.setScalar(1.1);
-    g.add(hull);
-  }
-  g.scale.setScalar(SHIP_SCALE);
-
-  const mats = [body, cabinMat, inkMat];
-  return {
-    group: g,
-    setOpacity(o: number) {
-      for (const m of mats) m.opacity = o;
-      g.visible = o > 0.02;
-    },
-  };
-}
-
 export interface Ships {
-  /** Add this to the SPIN group — ships belong to the planet's frame. */
-  group: Group;
-  /** Advance routes + land fade. `speedMul` shares ToonParams.cloudSpeed. */
-  update(speedMul: number): void;
-  dispose(): void;
+  group:Group;
+  update(speedMul:number):void;
+  dispose():void;
 }
-
-export function buildShips(): Ships {
-  const root = new Group();
-  let mask: LandMask | null = null;
-  void loadLandMask().then((m) => {
-    mask = m;
-  });
-
-  const ships: Array<{
-    orbit: Group;
-    boat: ReturnType<typeof buildBoat>;
-    speed: number;
-    opacity: number;
-  }> = [];
-
-  for (const cfg of ROUTES) {
-    const orbit = new Group();
-    orbit.rotation.x = cfg.tiltX;
-    orbit.rotation.z = cfg.tiltZ;
-    orbit.rotation.y = cfg.phase;
-    const boat = buildBoat();
-    boat.group.position.set(0, 0, SURFACE_RADIUS);
-    boat.group.rotation.y = cfg.speed >= 0 ? 0 : Math.PI;
-    boat.setOpacity(0); // fade in only once confirmed at sea
-    orbit.add(boat.group);
-    root.add(orbit);
-    ships.push({ orbit, boat, speed: cfg.speed, opacity: 0 });
+const BASINS=[[25,-45],[-20,-20],[30,-150],[-25,-130],[10,155],[-23,80],[5,-25],[-35,40]];
+export function buildShips():Ships {
+  const group=new Group();group.name='Ocean fleet';
+  const fleet:Array<{model:ReturnType<typeof buildShipModel>;lat:number;lng:number;r:number;phase:number;speed:number}>=[];
+  let disposed=false;
+  const up=new Vector3(),ahead=new Vector3(),forward=new Vector3(),side=new Vector3(),matrix=new Matrix4();
+  function pose(ship:typeof fleet[number]) {
+    const lat=ship.lat+Math.sin(ship.phase)*ship.r,lng=ship.lng+Math.cos(ship.phase)*ship.r/Math.cos(ship.lat*Math.PI/180);
+    latLngToVec3(lat,lng,up);
+    latLngToVec3(ship.lat+Math.sin(ship.phase+.001)*ship.r,ship.lng+Math.cos(ship.phase+.001)*ship.r/Math.cos(ship.lat*Math.PI/180),ahead);
+    forward.copy(ahead).addScaledVector(up,-ahead.dot(up)).normalize();side.copy(forward).cross(up);
+    matrix.makeBasis(forward,up,side);ship.model.group.quaternion.setFromRotationMatrix(matrix);
+    ship.model.group.position.copy(up).multiplyScalar(1.00001);
   }
-
-  const world = new Vector3();
-  const local = new Vector3();
-
-  return {
-    group: root,
-    update(speedMul: number) {
-      for (const s of ships) {
-        s.orbit.rotation.y += s.speed * speedMul;
-        let atSea = true;
-        if (mask) {
-          // Position in the planet's (spin-group) frame → lat/lng → mask.
-          s.boat.group.getWorldPosition(world);
-          root.parent?.worldToLocal(local.copy(world));
-          local.normalize();
-          const lat = (Math.asin(local.y) * 180) / Math.PI;
-          const lng = (Math.atan2(-local.z, local.x) * 180) / Math.PI;
-          atSea = isSea(mask, lat, lng);
-        }
-        const target = atSea ? 1 : 0;
-        if (s.opacity !== target) {
-          s.opacity = Math.max(
-            0,
-            Math.min(1, s.opacity + (target > s.opacity ? 1 : -1) * FADE_PER_FRAME),
-          );
-          s.boat.setOpacity(s.opacity);
-        }
+  void loadLandMask().then(mask=>{
+    if(disposed||!mask)return;
+    const clear=(lat:number,lng:number)=>[[0,0],[1.5,0],[-1.5,0],[0,1.5],[0,-1.5]].every(([a,b])=>isSea(mask,lat+a,lng+b/Math.cos(lat*Math.PI/180)));
+    for(let basin=0;basin<BASINS.length;basin++)for(let j=0;j<3;j++) {
+      let chosen:{lat:number;lng:number;r:number}|null=null;
+      for(let attempt=0;attempt<24&&!chosen;attempt++) {
+        const lat=BASINS[basin][0]+(j-1)*4+Math.sin(attempt*2.4)*3;
+        const lng=BASINS[basin][1]+Math.cos(attempt*2.4)*4;
+        const r=attempt<12?1.6:.8;
+        let safe=true;
+        for(let k=0;k<96&&safe;k++){const a=k/96*Math.PI*2;safe=clear(lat+Math.sin(a)*r,lng+Math.cos(a)*r/Math.cos(lat*Math.PI/180));}
+        if(safe)chosen={lat,lng,r};
       }
-    },
-    dispose() {
-      root.traverse((obj) => {
-        if (obj instanceof Mesh) {
-          obj.geometry.dispose();
-          const mats = Array.isArray(obj.material)
-            ? obj.material
-            : [obj.material];
-          for (const m of mats) m.dispose();
-        }
-      });
-    },
-  };
+      if(!chosen)continue;
+      const model=buildShipModel(SHIP_TYPES[(basin*3+j)%4]);fitPhysicalSize(model.group,SHIP_SIZE_M[SHIP_TYPES[(basin*3+j)%4]]);
+      const ship={model,...chosen,phase:j*2.1+basin*.6,speed:.00065+(j*.00012)};fleet.push(ship);pose(ship);group.add(model.group);
+    }
+    group.userData.shipCount=fleet.length;
+    group.userData.routes=fleet.map(s=>({kind:s.model.group.name,lat:s.lat,lng:s.lng,r:s.r}));
+  });
+  return {group,update(speedMul){for(const ship of fleet){ship.phase+=ship.speed*speedMul;pose(ship);}},dispose(){disposed=true;for(const ship of fleet)ship.model.dispose();}};
 }

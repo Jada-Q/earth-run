@@ -1,3 +1,5 @@
+import { meters } from "./world-scale";
+import { beveledBox } from "./beveled-box";
 // Sphere-walking player controller. The planet is an analytic unit sphere,
 // so no physics engine and no BVH: the player's pose is one quaternion
 // (local +Y = radial up, local +X = facing), and walking is rotating that
@@ -6,7 +8,7 @@
 
 import {
   BackSide,
-  BoxGeometry,
+  BufferGeometry,
   Group,
   Matrix4,
   Mesh,
@@ -19,21 +21,21 @@ import { latLngToVec3, vec3ToLatLng } from "./geo";
 import { buildRunner, type Outfit, type Runner, type RunnerPose } from "./runner";
 import { ensureElevationLoaded, groundHeightAt } from "./elevation";
 import { loadLandMask, isSea, type LandMask } from "./ships";
-import { INK } from "./palette";
+import { WORLD_STYLE } from "./palette";
 import { wobbleGeo } from "./wobble-geo";
 import { makeGradientMap } from "./clouds";
 
-const RUN_SPEED = 0.22; // rad/s ≈ 28s per lap — arcade pace, not a blur
-const BACK_SPEED = 0.09;
+const RUN_SPEED = meters(4.5); // 4.5 m/s at the shared asset scale
+const BACK_SPEED = meters(2);
 const SEA_SPEED_MUL = 1.15; // the boat is a little faster than legs
 const FLY_SPEED_MUL = 1.7; // wings beat legs
 const TURN_SPEED = 2.6; // rad/s
-const JUMP_VELOCITY = 0.32; // tap = a hop
-const CLIMB_SPEED = 0.16; // hold = the plane climbs at this rate
-const ALT_CAP = 0.075; // cruise ceiling above the terrain
-const GLIDE_GRAVITY = 0.45; // released/out of fuel → gentle glide down
+const JUMP_VELOCITY = meters(4); // tap = a hop
+const CLIMB_SPEED = meters(12); // hold = the plane climbs at this rate
+const ALT_CAP = meters(80); // cruise ceiling above the terrain
+const GLIDE_GRAVITY = meters(9.8); // released/out of fuel → gentle glide down
 const FUEL_MAX = 3.5; // seconds of climb; refills on touchdown
-const RUN_CYCLE_FREQ = 14; // limb swings per surface-radian, ~cartoon cadence
+const RUN_CYCLE_FREQ = 2 * Math.PI / meters(2.5); // limb swings per surface-radian, ~cartoon cadence
 
 export interface PlayerInputFrame {
   /** -1..1 — forward positive. */
@@ -79,21 +81,21 @@ function vehicleParts() {
     mats.push(m);
     return m;
   };
-  const inkHull = new MeshBasicMaterial({ color: INK, side: BackSide });
-  const geos: BoxGeometry[] = [];
+  const inkHull = new MeshBasicMaterial({ color: WORLD_STYLE.ink, side: BackSide });
+  const geos: BufferGeometry[] = [];
   const addBox = (
     parent: Group,
     mat: MeshToonMaterial,
     w: number, h: number, d: number,
     x: number, y: number, z: number,
   ) => {
-    const geo = new BoxGeometry(w, h, d);
+    const geo = beveledBox(w, h, d);
     geos.push(geo);
     const m = new Mesh(geo, mat);
     m.position.set(x, y, z);
     parent.add(m);
     const wGeo = wobbleGeo(geo);
-    geos.push(wGeo as BoxGeometry);
+    geos.push(wGeo as BufferGeometry);
     const hull = new Mesh(wGeo, inkHull);
     hull.position.set(x, y, z);
     hull.scale.setScalar(1.035);
@@ -131,7 +133,7 @@ export function buildPlayer(
   boatKit.addBox(boat, boatKit.matOf("#f2efe6"), 1.1, 0.3, 0.6, 0, 0.15, 0); // hull
   boatKit.addBox(boat, boatKit.matOf("#2e5d66"), 0.25, 0.22, 0.45, -0.35, 0.4, 0); // stern bench
   boatKit.addBox(boat, boatKit.matOf("#d2693e"), 0.3, 0.1, 0.1, 0.5, 0.34, 0); // bow trim
-  boat.scale.setScalar(0.034);
+  boat.scale.setScalar(meters(3.6) / 1.1);
   boat.visible = false;
   group.add(boat);
 
@@ -142,7 +144,7 @@ export function buildPlayer(
   planeKit.addBox(plane, planeKit.matOf("#d2693e"), 0.36, 0.07, 1.5, 0.08, 0.12, 0); // wing
   planeKit.addBox(plane, planeKit.matOf("#f2efe6"), 0.22, 0.06, 0.5, -0.52, 0.16, 0); // tail wing
   planeKit.addBox(plane, planeKit.matOf("#d2693e"), 0.18, 0.3, 0.07, -0.55, 0.28, 0); // fin
-  plane.scale.setScalar(0.034);
+  plane.scale.setScalar(meters(7) / 1.2);
   plane.visible = false;
   group.add(plane);
 
@@ -171,7 +173,7 @@ export function buildPlayer(
   const step = new Quaternion();
   const fwd = new Vector3();
   const probe = new Vector3();
-  const PROBE_ARC = 0.012; // sample terrain this far ahead/behind (radians)
+  const PROBE_ARC = meters(2); // sample terrain this far ahead/behind (radians)
 
   const apply = () => {
     up.set(0, 1, 0).applyQuaternion(q);
@@ -336,9 +338,9 @@ export function buildPlayer(
       boat.visible = sailing;
       if (sailing) {
         boat.rotation.x = Math.sin(nowMs * 0.003) * 0.06; // gentle roll
-        runner.group.position.y = 0.011; // standing on the deck
+        runner.group.position.y = .30 * boat.scale.y; // standing on the deck
       } else if (flying) {
-        runner.group.position.y = 0.006; // seated on the fuselage
+        runner.group.position.y = .23 * plane.scale.y; // seated on the fuselage
         plane.rotation.z = Math.max(-0.4, Math.min(0.4, jumpV * 1.2)); // nose follows the arc
       } else {
         runner.group.position.y = 0;

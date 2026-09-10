@@ -2,8 +2,7 @@
 
 Race a little runner around a tiny toon planet — eastbound from Tokyo,
 through 11 city checkpoint gates, back to the start line. Past drifting
-clouds, blocky airplanes with contrails, ships that fade out near
-coastlines, V-formations of birds, the occasional whale, and a satellite
+clouds, airplanes with contrails, ships following verified ocean routes, V-formations of birds, the occasional whale, and a satellite
 watching it all. The sun follows your local clock; city lights come up on
 the night side.
 
@@ -27,7 +26,14 @@ ambient life pack) was born there.
 - Planet shader samples a baked 2048×1024 mask: R = land SDF (crisp
   coastlines at any zoom + free coastline ink), G = vegetation noise,
   B = city-light splats (`pnpm bake` regenerates from world-atlas)
-- Everything instanced; ~12 draw-call groups total
+- Regional houses and six tree species use instancing; detailed characters
+  and landmarks retain their own articulated or material groups.
+- Physical asset sizes use one meter-to-world conversion. See
+  [scale references](lib/three/scale-reference.md) for dimensions and sources.
+  Globe geography remains compressed for the travel map.
+- Blender landmark generation scripts live in `scripts/modeling/`; runtime
+  geometry uses the existing three.js path without an additional model loader.
+  `?models=original` retains the historical procedural landmark comparison.
 
 ## Run
 
