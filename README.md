@@ -24,6 +24,23 @@ ambient life pack) was born there.
 - Rendering controls are restricted to `?debug=1`. The original race implementation
   remains in the source, but exploration does not show a timer or activate its gates.
 
+## Tokyo discovery and photography
+
+Tokyo now has an optional side path. Near the fork, the dog sniffs and looks back;
+players can investigate or continue to the landmark. A resident asks for a lost
+camera pouch. Find it by the bench and return it to unlock a pink sakura scarf,
+which the companion wears in every city. The reward persists locally. Paving follows the rendered ground normal so slopes
+do not conceal the character's feet. Pausing
+the task keeps the carried pouch for the current session; unfinished task progress
+is not persisted across a reload.
+
+At a landmark photo point, opening the camera does not stamp the passport.
+Choose a landmark or traveler-and-dog framing preset, orbit, tilt and zoom, then
+press the shutter. Canceling preserves the photo objective. Framing hints check
+visible mesh bounds against the camera; they are advisory, not a score or an
+occlusion detector. PNG postcards include a soft sky background and exclude HUD
+controls. Downloading remains an explicit action.
+
 ## Journey validation
 
 The Tokyo photo → stamp → departure → Paris transfer was checked in the browser.

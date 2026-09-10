@@ -35,7 +35,9 @@ export interface Companion {
     playerFwd: Vector3,
     colliders?: ReadonlyArray<{ dir: Vector3; minDot: number }>,
     lead?: Vector3,
+    mood?: "sniff" | "lookBack",
   ): void;
+  setScarf(enabled: boolean): void;
   dispose(): void;
 }
 
@@ -104,7 +106,7 @@ export function buildCompanion(): Companion {
 
   return {
     group,
-    update(dt, nowMs, playerUp, playerFwd, colliders, lead) {
+    update(dt, nowMs, playerUp, playerFwd, colliders, lead, mood) {
       side.copy(playerFwd).cross(playerUp); // right of the runner
       target
         .copy(playerUp)
@@ -154,6 +156,8 @@ export function buildCompanion(): Companion {
         leg.rotation.z = swing;
         dog.knees[i].rotation.z = Math.max(0,-swing) * .7;
       });
+      dog.head.rotation.z = mood === "sniff" ? -.45 + Math.sin(nowMs * .009) * .08 : 0;
+      dog.head.rotation.y = mood === "lookBack" ? 1.25 : 0;
       tail.rotation.x = Math.sin(nowMs * 0.014) * 0.6;
       // Over water the dog gets its own little boat (waterline test, same
       // tight threshold as the player's).
@@ -169,6 +173,7 @@ export function buildCompanion(): Companion {
         body.position.y = sea ? meters(.12) : 0;
       }
     },
+    setScarf(enabled) { dog.bandana.visible = enabled; },
     dispose() {
       dog.dispose();
       for (const g of geos) g.dispose();

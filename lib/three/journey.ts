@@ -1,7 +1,8 @@
+import type { DiscoveryHud } from "./tokyo-discovery";
 import { treeCanopy } from "./tree-species";
 import { BoxGeometry, CylinderGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, TorusGeometry, Vector3 } from "three";
 import type { Landmarks } from "./landmarks";
-import { groundHeightAt } from "./elevation";
+import { groundHeightAt, groundNormalAt } from "./elevation";
 import { meters, LANDMARK_HEIGHT_M } from "./world-scale";
 
 export const DESTINATIONS = [
@@ -21,6 +22,7 @@ export type JourneyStage = "landmark" | "departure";
 export interface JourneyHud {
   city: string; title: string; key: string; stage: JourneyStage;
   distance: number; ready: boolean; following: boolean; scenic: boolean;
+  discovery: DiscoveryHud | null;
 }
 
 /** Short pedestrian approach outside each monument's actual collision footprint. */
@@ -80,10 +82,11 @@ export function buildJourney(landmarks: Landmarks) {
   function update() {
     for (let i = 0; i < path.length; i++) {
       const p = departure.clone().lerp(photo, i / (path.length - 1)).normalize();
-      place(path[i], p, meters(.04));
-      const along = photo.clone().sub(departure).addScaledVector(p, -photo.clone().sub(departure).dot(p)).normalize();
-      const right = p.clone().cross(along).normalize();
-      path[i].quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, p, along));
+      place(path[i], p, meters(-.025));
+      const surface = groundNormalAt(p, new Vector3());
+      const along = photo.clone().sub(departure).addScaledVector(surface, -photo.clone().sub(departure).dot(surface)).normalize();
+      const right = surface.clone().cross(along).normalize();
+      path[i].quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, surface, along));
     }
     planted.forEach((tree, i) => {
       const p = departure.clone().lerp(photo, .15 + Math.floor(i / 2) * .2).normalize();

@@ -1,3 +1,4 @@
+import { buildTokyoDiscovery } from "./tokyo-discovery";
 import { buildJourney, DESTINATIONS, type JourneyHud } from "./journey";
 import { vec3ToLatLng } from "./geo";
 import { groundHeightAt } from "./elevation";
@@ -105,6 +106,9 @@ export class EarthRunApp {
   private input: GameInput | null = null;
   private race: Race;
   private journey: ReturnType<typeof buildJourney>;
+  private discovery: ReturnType<typeof buildTokyoDiscovery>;
+  private photoMode: "portrait" | "landmark" | null = null;
+  private photoTilt = 0;
   private following = false;
   private scenic = false;
   private paused = false;
@@ -169,6 +173,9 @@ export class EarthRunApp {
     this.spinGroup.add(this.landmarks.group);
     this.journey = buildJourney(this.landmarks);
     this.spinGroup.add(this.journey.group);
+    this.discovery = buildTokyoDiscovery();
+    this.spinGroup.add(this.discovery.group);
+    this.discovery.group.visible = false;
     this.journey.group.visible = false;
     this.race.group.visible = false;
     this.npcs = buildNpcs(this.landmarks);
@@ -271,12 +278,51 @@ export class EarthRunApp {
   journeyHud(): JourneyHud | null {
     if (!this.player || this.mode !== "play") return null;
     const city = DESTINATIONS.find(c => c.key === this.journey.key)!;
-    const distance = Math.acos(Math.min(1, this.player.up.dot(this.journey.target()))) / meters(1);
+    const distance = Math.acos(Math.min(1, this.player.up.dot(this.navigationTarget()))) / meters(1);
     return { city: city.label, title: city.title, key: city.key, stage: this.journey.stage,
       distance: Math.round(distance), ready: distance < 4 && !this.player.isFlying(),
-      following: this.following, scenic: this.scenic };
+      following: this.following, scenic: this.scenic, discovery: this.discovery.hud() };
   }
-  followDog(): void { this.following = !this.following; this.scenic = false; }
+  private navigationTarget(): Vector3 { return this.discovery.active() ? this.discovery.target() : this.journey.target(); }
+  investigateDiscovery(): void { this.discovery.investigate(); this.following = true; this.scenic = false; }
+  skipDiscovery(): void { this.discovery.skip(); this.following = true; this.scenic = false; }
+  interactDiscovery(): "request" | "found" | "reward" | null {
+    if (!this.player || this.player.isFlying()) return null;
+    const result = this.discovery.interact(this.player.up); this.following = false;
+    if (result === "reward") this.companion?.setScarf(true);
+    return result;
+  }
+  openPhoto(): boolean {
+    if (!this.player || this.discovery.active() || this.journey.stage !== "landmark" || !this.journeyHud()?.ready) return false;
+    this.setPhotoView("landmark"); this.following = false; return true;
+  }
+  setPhotoView(view: "portrait" | "landmark"): void {
+    this.photoMode = view; this.scenic = view === "landmark";
+    this.viewYaw = view === "portrait" ? Math.PI : 0; this.viewZoom = 1; this.photoTilt = 0;
+  }
+  tiltPhoto(delta: number): void { this.photoTilt = Math.max(-.5, Math.min(.5, this.photoTilt + delta)); }
+  closePhoto(): void { this.photoMode = null; this.scenic = false; this.viewYaw = 0; this.viewZoom = 1; this.photoTilt = 0; }
+  photoComposition(): { person: boolean; dog: boolean; landmark: boolean } {
+    const inFrame = (object: Group | undefined | null) => {
+      if (!object) return false;
+      object.updateWorldMatrix(true, true);
+      const cam = this.rig.camera; cam.updateMatrixWorld(true);
+      let fits = true, count = 0;
+      object.traverseVisible(child => {
+        if (!(child instanceof Mesh) || !fits) return;
+        child.geometry.computeBoundingBox(); const box = child.geometry.boundingBox;
+        if (!box) return; count++;
+        for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+          const p = new Vector3(x, y, z).applyMatrix4(child.matrixWorld).project(cam);
+          if (Math.abs(p.x) > .96 || Math.abs(p.y) > .96 || p.z < -1 || p.z > 1) fits = false;
+        }
+      });
+      return fits && count > 0;
+    };
+    return { person: inFrame(this.player?.group), dog: inFrame(this.companion?.group),
+      landmark: inFrame(this.landmarks.group.getObjectByName(`landmark:${this.journey.key}`) as Group | undefined) };
+  }
+  followDog(): void { if (this.discovery.hud()?.state === "noticed") this.discovery.skip(); this.following = !this.following; this.scenic = false; }
   setPaused(value: boolean): void { this.paused = value; this.manualForward = 0; this.manualTurn = 0; }
   moveControl(forward: number, turn: number): void { this.manualForward = forward; this.manualTurn = turn; }
   cameraControl(turn: number, zoom: number): void {
@@ -284,16 +330,24 @@ export class EarthRunApp {
   }
   toggleScenic(): void { this.scenic = !this.scenic; this.following = false; }
   stampVisit(): boolean {
-    if (!this.journeyHud()?.ready || this.journey.stage !== "landmark") return false;
+    if (!this.journeyHud()?.ready || this.discovery.active() || this.journey.stage !== "landmark") return false;
     this.journey.stamp(); this.following = false; return true;
   }
   capturePostcard(): string {
     this.renderer.render(this.scene, this.rig.camera);
-    return this.canvas.toDataURL("image/png");
+    const output = document.createElement("canvas");
+    output.width = this.canvas.width; output.height = this.canvas.height;
+    const context = output.getContext("2d");
+    if (!context) throw new Error("Postcard canvas unavailable");
+    const sky = context.createLinearGradient(0, 0, 0, output.height);
+    sky.addColorStop(0, "#9fc9c8"); sky.addColorStop(1, "#e6eddb");
+    context.fillStyle = sky; context.fillRect(0, 0, output.width, output.height);
+    context.drawImage(this.canvas, 0, 0);
+    return output.toDataURL("image/png");
   }
   travelTo(key: string): void {
     if (!this.player || !DESTINATIONS.some(c => c.key === key)) return;
-    this.journey.configure(key); this.spawnJourney(); this.scenic = false;
+    this.journey.configure(key); this.spawnJourney(); this.closePhoto();
     this.following = false; this.viewYaw = 0; this.viewZoom = 1;
   }
   private spawnJourney(): void {
@@ -303,6 +357,8 @@ export class EarthRunApp {
     this.player = buildPlayer(pos.lat, pos.lng, this.outfit);
     this.scene.add(this.player.group);
     this.companion = buildCompanion(); this.scene.add(this.companion.group);
+    this.companion.setScarf(this.discovery.completed);
+    this.discovery.configure(this.journey.key, this.journey.departure, this.journey.photo);
     this.journey.group.visible = true;
     this.rig.camera.position.copy(this.player.group.position).addScaledVector(this.player.up, meters(5)).addScaledVector(this.player.forward, -meters(12));
   }
@@ -392,7 +448,8 @@ export class EarthRunApp {
       const frame = this.input.read();
       frame.forward += this.manualForward; frame.turn += this.manualTurn;
       if (frame.forward || frame.turn) this.following = false;
-      const target = this.journey.target();
+      if (this.discovery.update(this.player.up)) this.following = false;
+      const target = this.navigationTarget();
       const desired = target.clone().addScaledVector(this.player.up, -target.dot(this.player.up)).normalize();
       const remaining = Math.acos(Math.min(1, target.dot(this.player.up)));
       if (this.following && !this.paused && !this.scenic) {
@@ -403,7 +460,7 @@ export class EarthRunApp {
           frame.forward = Math.abs(angle) < .5 ? .65 : 0;
         }
       }
-      if (this.paused || this.scenic) { frame.forward = 0; frame.turn = 0; frame.jump = false; frame.jumpHeld = false; }
+      if (this.paused || this.scenic || this.photoMode) { frame.forward = 0; frame.turn = 0; frame.jump = false; frame.jumpHeld = false; }
       frame.chop = false;
       this.journey.update();
       for (const child of this.landmarks.group.children) {
@@ -430,6 +487,7 @@ export class EarthRunApp {
         this.player.forward,
         colliders,
         this.following ? desired : undefined,
+        this.discovery.hud()?.state === "noticed" ? (Math.sin(now * .0015) > 0 ? "sniff" : "lookBack") : undefined,
       );
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
@@ -467,7 +525,7 @@ export class EarthRunApp {
         .addScaledVector(up, camH)
         .addScaledVector(fwd, -camD);
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
-      if (!this.scenic) cam.position.lerp(this.camTarget, k);
+      if (!this.scenic && !this.photoMode) cam.position.lerp(this.camTarget, k);
       // The camera itself respects building columns: push its ground
       // projection out of any keep-out disc.
       const camR = cam.position.length();
@@ -494,10 +552,17 @@ export class EarthRunApp {
         const center = this.journey.center;
         const base = center.clone().multiplyScalar(1 + groundHeightAt(center));
         const west = new Vector3(0, 1, 0).cross(center).normalize().negate().applyAxisAngle(center, this.viewYaw);
-        this.camLook.copy(base).addScaledVector(center, this.journey.height * .43);
+        this.camLook.copy(base).addScaledVector(center, this.journey.height * (.43 + this.photoTilt));
         this.camTarget.copy(base).addScaledVector(center, this.journey.height * .55)
           .addScaledVector(west, Math.max(meters(50), this.journey.height * 2.1) * this.viewZoom);
         cam.position.lerp(this.camTarget, k); cam.up.copy(center);
+      }
+      if (this.photoMode === "portrait") {
+        const base = this.player.group.position;
+        const axis = this.player.forward.clone().applyAxisAngle(up, this.viewYaw);
+        this.camTarget.copy(base).addScaledVector(up, meters(1.8)).addScaledVector(axis, -meters(5) * this.viewZoom);
+        this.camLook.copy(base).addScaledVector(up, meters(.9 + this.photoTilt * 4));
+        cam.position.lerp(this.camTarget, k); cam.up.copy(up);
       }
       cam.lookAt(this.camLook);
     }
@@ -540,6 +605,7 @@ export class EarthRunApp {
     this.satellite.dispose();
     this.race.dispose();
     this.journey.dispose();
+    this.discovery.dispose();
     this.landmarks.dispose();
     this.npcs.dispose();
     this.streetProps.dispose();

@@ -93,3 +93,14 @@ export function groundHeightAt(up: Vector3): number {
   const denominator = normal.dot(up);
   return Math.abs(denominator) > 1e-14 ? normal.dot(a) / denominator - 1 : sampledHeightAt(up);
 }
+
+
+/** Surface normal of the same rendered triangle, for ground-aligned paving. */
+export function groundNormalAt(up: Vector3, out: Vector3): Vector3 {
+  if (!map) return out.copy(up);
+  groundHeightAt(up);
+  if (normal.lengthSq() < 1e-20) return out.copy(up);
+  out.copy(normal).normalize();
+  if (out.dot(up) < 0) out.negate();
+  return out;
+}
