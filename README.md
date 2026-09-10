@@ -1,10 +1,10 @@
 # Earth Run
 
-Race a little runner around a tiny toon planet — eastbound from Tokyo,
-through 11 city checkpoint gates, back to the start line. Past drifting
-clouds, airplanes with contrails, ships following verified ocean routes, V-formations of birds, the occasional whale, and a satellite
-watching it all. The sun follows your local clock; city lights come up on
-the night side.
+Explore a tiny toon planet with a dog companion. Start beside Tokyo Tower,
+follow a short pedestrian approach, take a postcard and collect a passport
+stamp, then walk to the travel station to choose another city. City transfers
+are immediate; the station represents a connection to a port or airport,
+not a simulated scheduled ferry journey.
 
 ![Earth Run — Tokyo Tower spawn](docs/screenshot.png)
 
@@ -14,10 +14,22 @@ ambient life pack) was born there.
 
 ## Controls
 
-- **WASD / arrows** — run & turn · **space** — jump
-- **Touch** — left half of the screen is a joystick; round button jumps
-- The gold gate is your next target; the ink arrow at your feet points
-  the way along the sphere.
+- **WASD / arrows** or on-screen movement buttons: walk and turn.
+- **Follow the dog**: assisted walking to the current photo point or travel station.
+- **E / contextual action**: take a postcard and stamp, or select the next city when nearby.
+- **Camera / controls**: turn and zoom the camera; **landmark overview** frames the building.
+- **Space**: jump; hold to fly. The on-screen flight control is inside the controls panel.
+- **Passport**: view locally saved stamps. Postcard images can be downloaded;
+  images are not persisted automatically. Storage failure leaves an in-memory passport.
+- Rendering controls are restricted to `?debug=1`. The original race implementation
+  remains in the source, but exploration does not show a timer or activate its gates.
+
+## Journey validation
+
+The Tokyo photo → stamp → departure → Paris transfer was checked in the browser.
+All 11 approach corridors were sampled against building and local planting collision
+circles. Pedestrian elevation now follows the same 256 × 192 triangulated surface
+as the renderer; 33 city-route checks matched raycast heights within 7 mm.
 
 ## Tech
 

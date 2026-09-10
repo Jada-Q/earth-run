@@ -1,3 +1,6 @@
+import { buildJourney, DESTINATIONS, type JourneyHud } from "./journey";
+import { vec3ToLatLng } from "./geo";
+import { groundHeightAt } from "./elevation";
 import { meters } from "./world-scale";
 // EarthRunApp — imperative three.js orchestrator for the tiny-planet racing
 // game. Step-1 shape: the living toon planet (clouds, planes, ships, birds,
@@ -101,6 +104,14 @@ export class EarthRunApp {
   private outfit: Outfit | undefined;
   private input: GameInput | null = null;
   private race: Race;
+  private journey: ReturnType<typeof buildJourney>;
+  private following = false;
+  private scenic = false;
+  private paused = false;
+  private manualForward = 0;
+  private manualTurn = 0;
+  private viewYaw = 0;
+  private viewZoom = 1;
   private landmarks: Landmarks;
   private npcs: Npcs;
   private streetProps: StreetProps;
@@ -156,6 +167,10 @@ export class EarthRunApp {
     // Landmarks + residents live in the planet's frame too.
     this.landmarks = buildLandmarks();
     this.spinGroup.add(this.landmarks.group);
+    this.journey = buildJourney(this.landmarks);
+    this.spinGroup.add(this.journey.group);
+    this.journey.group.visible = false;
+    this.race.group.visible = false;
     this.npcs = buildNpcs(this.landmarks);
     this.spinGroup.add(this.npcs.group);
     this.streetProps = buildStreetProps(this.landmarks);
@@ -173,6 +188,7 @@ export class EarthRunApp {
     this.scene.add(this.guideArrow);
 
     this.introLetters = buildIntroLetters();
+    this.introLetters.group.visible = false;
     this.scene.add(this.introLetters.group);
 
     this.detachControls = attachControls({
@@ -240,14 +256,55 @@ export class EarthRunApp {
     return regionAt(this.player.up);
   }
 
-  /** Landmark plaque: name of the monument you're standing near (≤3°). */
+  /** Match the nearest actual display footprint, not overlapping city checkpoints. */
   nearbyLandmark(): string | null {
     if (!this.player) return null;
-    const NEAR = Math.cos((3 * Math.PI) / 180);
-    for (const a of this.landmarks.anchors) {
-      if (this.player.up.dot(a.dir) > NEAR) return a.name;
-    }
-    return null;
+    let nearest = Infinity, name: string | null = null;
+    this.landmarks.anchors.forEach((a, i) => {
+      const c = this.landmarks.colliders[i];
+      const edge = Math.acos(Math.min(1, this.player!.up.dot(c.dir))) - Math.acos(c.minDot);
+      if (edge < meters(18) && edge < nearest) { nearest = edge; name = a.name; }
+    });
+    return name;
+  }
+
+  journeyHud(): JourneyHud | null {
+    if (!this.player || this.mode !== "play") return null;
+    const city = DESTINATIONS.find(c => c.key === this.journey.key)!;
+    const distance = Math.acos(Math.min(1, this.player.up.dot(this.journey.target()))) / meters(1);
+    return { city: city.label, title: city.title, key: city.key, stage: this.journey.stage,
+      distance: Math.round(distance), ready: distance < 4 && !this.player.isFlying(),
+      following: this.following, scenic: this.scenic };
+  }
+  followDog(): void { this.following = !this.following; this.scenic = false; }
+  setPaused(value: boolean): void { this.paused = value; this.manualForward = 0; this.manualTurn = 0; }
+  moveControl(forward: number, turn: number): void { this.manualForward = forward; this.manualTurn = turn; }
+  cameraControl(turn: number, zoom: number): void {
+    this.viewYaw += turn; this.viewZoom = Math.max(.65, Math.min(2.5, this.viewZoom + zoom));
+  }
+  toggleScenic(): void { this.scenic = !this.scenic; this.following = false; }
+  stampVisit(): boolean {
+    if (!this.journeyHud()?.ready || this.journey.stage !== "landmark") return false;
+    this.journey.stamp(); this.following = false; return true;
+  }
+  capturePostcard(): string {
+    this.renderer.render(this.scene, this.rig.camera);
+    return this.canvas.toDataURL("image/png");
+  }
+  travelTo(key: string): void {
+    if (!this.player || !DESTINATIONS.some(c => c.key === key)) return;
+    this.journey.configure(key); this.spawnJourney(); this.scenic = false;
+    this.following = false; this.viewYaw = 0; this.viewZoom = 1;
+  }
+  private spawnJourney(): void {
+    if (this.player) { this.scene.remove(this.player.group); this.player.dispose(); }
+    if (this.companion) { this.scene.remove(this.companion.group); this.companion.dispose(); }
+    const pos = vec3ToLatLng(this.journey.spawn);
+    this.player = buildPlayer(pos.lat, pos.lng, this.outfit);
+    this.scene.add(this.player.group);
+    this.companion = buildCompanion(); this.scene.add(this.companion.group);
+    this.journey.group.visible = true;
+    this.rig.camera.position.copy(this.player.group.position).addScaledVector(this.player.up, meters(5)).addScaledVector(this.player.forward, -meters(12));
   }
 
   /** Dev teleport — rebuild the runner at given coords (debug pane use). */
@@ -325,10 +382,7 @@ export class EarthRunApp {
         this.tiltGroup.rotation.x = 0;
         this.spinGroup.rotation.y = 0;
         this.tiltGroup.position.y = 0;
-        this.player = buildPlayer(SPAWN.lat, SPAWN.lng, this.outfit);
-        this.scene.add(this.player.group);
-        this.companion = buildCompanion();
-        this.scene.add(this.companion.group);
+        this.spawnJourney();
         this.input = attachInput(this.canvas);
         cam.fov = PLAY_FOV;
         cam.updateProjectionMatrix();
@@ -336,13 +390,36 @@ export class EarthRunApp {
       }
     } else if (this.player && this.input) {
       const frame = this.input.read();
+      frame.forward += this.manualForward; frame.turn += this.manualTurn;
+      if (frame.forward || frame.turn) this.following = false;
+      const target = this.journey.target();
+      const desired = target.clone().addScaledVector(this.player.up, -target.dot(this.player.up)).normalize();
+      const remaining = Math.acos(Math.min(1, target.dot(this.player.up)));
+      if (this.following && !this.paused && !this.scenic) {
+        if (remaining < meters(2.5)) this.following = false;
+        else {
+          const angle = Math.atan2(this.player.up.dot(this.player.forward.clone().cross(desired)), this.player.forward.dot(desired));
+          frame.turn = Math.max(-1, Math.min(1, angle * 2));
+          frame.forward = Math.abs(angle) < .5 ? .65 : 0;
+        }
+      }
+      if (this.paused || this.scenic) { frame.forward = 0; frame.turn = 0; frame.jump = false; frame.jumpHeld = false; }
+      frame.chop = false;
+      this.journey.update();
+      for (const child of this.landmarks.group.children) {
+        if (child.name.startsWith("landmark:")) {
+          const dir = child.position.clone().normalize();
+          child.position.copy(dir).multiplyScalar(1 + groundHeightAt(dir));
+        }
+      }
       // The clock starts the first time you move.
-      if (frame.forward !== 0 || frame.turn !== 0) this.race.start(now);
+      // Travel exploration does not start the optional historical race.
       if (frame.chop && this.trees.tryChop(this.player.up)) {
         this.player.chop();
       }
       const colliders = [
         ...this.landmarks.colliders,
+        ...this.journey.colliders,
         ...this.trees.colliders(),
       ];
       this.player.update(dt, frame, colliders);
@@ -352,10 +429,11 @@ export class EarthRunApp {
         this.player.up,
         this.player.forward,
         colliders,
+        this.following ? desired : undefined,
       );
       this.race.update(now, this.player.up);
       // Ground guide arrow toward the active gate.
-      const t = this.race.targetTangent(this.player.up, this.guideDir);
+      const t = this.guideDir.copy(desired);
       if (t) {
         this.guideArrow.visible = true;
         this.guideArrow.position
@@ -370,7 +448,7 @@ export class EarthRunApp {
       // Follow cam: behind and above the runner, "up" = the runner's up so
       // the horizon stays level across the whole sphere (poles included).
       const up = this.player.up;
-      const fwd = this.player.forward;
+      const fwd = this.player.forward.clone().applyAxisAngle(up, this.viewYaw);
       // In town the camera rises over the rooftops — a ground-level cam
       // jammed between cottages/poles clips through everything.
       let cityness = 0;
@@ -381,7 +459,7 @@ export class EarthRunApp {
         }
       }
       const camH = CAM_HEIGHT + (CAM_HEIGHT_CITY - CAM_HEIGHT) * cityness;
-      const camD = CAM_DIST + (CAM_DIST_CITY - CAM_DIST) * cityness;
+      const camD = (CAM_DIST + (CAM_DIST_CITY - CAM_DIST) * cityness) * this.viewZoom;
       // Based on the player's actual radial position so the camera rides
       // up and over mountain terrain with them.
       this.camTarget
@@ -389,7 +467,7 @@ export class EarthRunApp {
         .addScaledVector(up, camH)
         .addScaledVector(fwd, -camD);
       const k = 1 - Math.exp(-dt * CAM_SMOOTH);
-      cam.position.lerp(this.camTarget, k);
+      if (!this.scenic) cam.position.lerp(this.camTarget, k);
       // The camera itself respects building columns: push its ground
       // projection out of any keep-out disc.
       const camR = cam.position.length();
@@ -412,6 +490,15 @@ export class EarthRunApp {
       // Look well past the runner so the horizon sits high in frame
       // (street-level feel, like the reference).
       this.camLook.copy(this.player.group.position).addScaledVector(up, meters(1)).addScaledVector(fwd, meters(5));
+      if (this.scenic) {
+        const center = this.journey.center;
+        const base = center.clone().multiplyScalar(1 + groundHeightAt(center));
+        const west = new Vector3(0, 1, 0).cross(center).normalize().negate().applyAxisAngle(center, this.viewYaw);
+        this.camLook.copy(base).addScaledVector(center, this.journey.height * .43);
+        this.camTarget.copy(base).addScaledVector(center, this.journey.height * .55)
+          .addScaledVector(west, Math.max(meters(50), this.journey.height * 2.1) * this.viewZoom);
+        cam.position.lerp(this.camTarget, k); cam.up.copy(center);
+      }
       cam.lookAt(this.camLook);
     }
 
@@ -431,7 +518,7 @@ export class EarthRunApp {
     this.satellite.update(this.params.cloudSpeed, now);
     this.npcs.update(now, dt);
 
-    this.planet.applyParams(this.params, this.lightDir);
+    this.planet.applyParams(this.mode === "play" ? { ...this.params, outlineWidth: meters(.05) } : this.params, this.lightDir);
     this.renderer.render(this.scene, cam);
   };
 
@@ -452,6 +539,7 @@ export class EarthRunApp {
     this.whale.dispose();
     this.satellite.dispose();
     this.race.dispose();
+    this.journey.dispose();
     this.landmarks.dispose();
     this.npcs.dispose();
     this.streetProps.dispose();

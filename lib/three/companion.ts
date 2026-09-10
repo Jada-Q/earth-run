@@ -34,6 +34,7 @@ export interface Companion {
     playerUp: Vector3,
     playerFwd: Vector3,
     colliders?: ReadonlyArray<{ dir: Vector3; minDot: number }>,
+    lead?: Vector3,
   ): void;
   dispose(): void;
 }
@@ -103,13 +104,14 @@ export function buildCompanion(): Companion {
 
   return {
     group,
-    update(dt, nowMs, playerUp, playerFwd, colliders) {
+    update(dt, nowMs, playerUp, playerFwd, colliders, lead) {
       side.copy(playerFwd).cross(playerUp); // right of the runner
       target
         .copy(playerUp)
         .addScaledVector(playerFwd, -FOLLOW_BACK)
         .addScaledVector(side, FOLLOW_SIDE)
         .normalize();
+      if (lead) target.copy(playerUp).addScaledVector(lead, meters(2.2)).normalize();
       if (!initialized) {
         dir.copy(target);
         initialized = true;
